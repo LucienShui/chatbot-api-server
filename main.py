@@ -38,10 +38,11 @@ async def get():
 @app.post("/api/chat/")
 async def chat(request: Request):
     json_request: dict = await request.json()
-    query = json_request['query']
-    history = json_request['history']
+    query: str = json_request['query']
+    history: list = json_request['history']
+    parameters: dict = json_request.get('parameters', {})
     logger.info(f'{request.client.host}:{request.client.port} query = {query}')
-    response, history = model.chat(tokenizer, query, history=history)
+    response, history = model.chat(tokenizer, query, history=history, **parameters)
     return {
         "response": response,
         "history": history,
@@ -59,11 +60,12 @@ async def steam_chat(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            json_request = await websocket.receive_json()
-            query = json_request['query']
-            history = json_request['history']
+            json_request: dict = await websocket.receive_json()
+            query: str = json_request['query']
+            history: list = json_request['history']
+            parameters: dict = json_request.get('parameters', {})
             logger.info(f'{websocket.client.host}:{websocket.client.port} query = {query}')
-            for response, history in model.stream_chat(tokenizer, query, history=history):
+            for response, history in model.stream_chat(tokenizer, query, history=history, **parameters):
                 await websocket.send_json({
                     "response": response,
                     "history": history,
