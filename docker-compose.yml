@@ -9,6 +9,7 @@ services:
       - ./:/app
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
+    restart: always
     environment:
       CONFIG_FILE: /app/config.json
     entrypoint: ["python3"]
