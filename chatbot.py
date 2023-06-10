@@ -101,16 +101,12 @@ class ChatRemote(ChatBotBase):
         return message
 
 
+supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, ChatRemote, ChatGLM]}
+
+
 def from_config(bot_class: str, config: dict) -> ChatBotBase:
-    supported_class = ['ChatGPT', 'AzureChatGPT', 'ChatRemote']
-    assert bot_class in supported_class
-    if bot_class == 'ChatGPT':
-        return ChatGPT(**config)
-    if bot_class == 'AzureChatGPT':
-        return AzureChatGPT(**config)
-    if bot_class == 'ChatRemote':
-        return ChatRemote(**config)
-    raise ModuleNotFoundError(bot_class)
+    assert bot_class in supported_class.keys(), f"{bot_class} not in {list(supported_class.keys())}"
+    return supported_class[bot_class](**config)
 
 
 def from_bot_map_config(bot_map_config: Dict[str, dict]) -> Dict[str, ChatBotBase]:
