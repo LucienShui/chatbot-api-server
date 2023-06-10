@@ -3,7 +3,7 @@ version: "3"
 services:
   chatglm:
     image: chatglm-runtime:latest
-    container_name: chatglm
+    container_name: chatbot-api-server
     build: .
     volumes:
       - ./:/app
