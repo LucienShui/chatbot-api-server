@@ -1,4 +1,5 @@
 import logging
+import os
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -15,7 +16,7 @@ logging.basicConfig(
     ]
 )
 
-pretrained = "THUDM/chatglm-6b-int4-qe"
+pretrained = os.environ['PRETRAINED']
 tokenizer = AutoTokenizer.from_pretrained(pretrained, trust_remote_code=True)
 model = AutoModel.from_pretrained(pretrained, trust_remote_code=True).half().cuda()
 model = model.eval()
@@ -77,7 +78,7 @@ async def steam_chat(websocket: WebSocket):
 
 
 def main():
-    uvicorn.run(f"{__name__}:app", host='0.0.0.0', port=8000, workers=1)
+    uvicorn.run(app, host=os.environ.get('HOST', '0.0.0.0'), port=int(os.environ.get('PORT', 8000)))
 
 
 if __name__ == '__main__':
