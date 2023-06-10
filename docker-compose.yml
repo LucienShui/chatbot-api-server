@@ -7,11 +7,10 @@ services:
     build: .
     volumes:
       - ./:/app
-      - /path/to/model:/model/chatglm-6b:ro
       - /etc/localtime:/etc/localtime:ro
     working_dir: /app
     environment:
-      PRETRAINED: /model/chatglm-6b
+      CONFIG_FILE: /app/config.json
     entrypoint: ["python3"]
     command: ["main.py"]
     ports:
