@@ -1,11 +1,11 @@
 import logging
 import os
-from typing import Dict
+from typing import Dict, List, Any
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from util import load_config
 from chatbot import from_bot_map_config, ChatBotBase
 
@@ -32,17 +32,29 @@ with open('index.html') as f:
     html = f.read()
 
 
+@app.exception_handler(Exception)
+async def exception_handler(request: Request, e: Exception) -> Response:
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": f"{e.__class__.__name__}: {str(e)}",
+            "status": 500
+        }
+    )
+
+
 @app.get("/")
-async def get():
+async def get() -> Response:
     return HTMLResponse(html)
 
 
 @app.post('/api/chat/{bot}')
-async def chat_api(bot: str, body: dict):
-    query: str = body['query']
-    history: list = body['history']
-    parameters: dict = body.get('parameters', {})
-    response = bot_map[bot].chat(query, history=history, parameters=parameters)
+async def chat(bot: str, request: Request):
+    json_request: Dict[str, Any] = await request.json()
+    query: str = json_request['query']
+    history: List[List[str]] = json_request.get('history', [])
+    parameters: Dict[str, Any] = json_request.get('parameters', {})
+    response = bot_map[bot].chat(query, history=history, parameters=parameters or {})
     return {
         "response": response,
         "history": history + [[query, response]],
