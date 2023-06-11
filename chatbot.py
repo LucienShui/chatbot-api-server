@@ -117,17 +117,24 @@ def import_remote(module_path: str, config: dict):
         an object of module
     """
     import sys
-    base_dir, module = os.path.split(module_path)
-    filename, class_name = os.path.splitext(module)
-    class_name = class_name.replace('.', '')
-    dont_write_bytecode = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True  # do not generate __pycache__ inside directory
-    sys.path.insert(0, base_dir)
-    exec(f'from {filename} import {class_name}')
-    obj = eval(class_name)(**config)
-    sys.path.pop(0)
-    sys.dont_write_bytecode = dont_write_bytecode
-    return obj
+    import tempfile
+    import shutil
+    package_name: str = 'remote_code'
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        base_dir, module = os.path.split(module_path)
+        shutil.copytree(base_dir, os.path.join(tmp_dir, package_name))
+        filename, class_name = os.path.splitext(module)
+        class_name = class_name.replace('.', '')
+
+        dont_write_bytecode = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True  # do not generate __pycache__ inside directory
+        sys.path.insert(0, tmp_dir)
+
+        exec(f'from {package_name}.{filename} import {class_name}')
+        obj = eval(class_name)(**config)
+        sys.path.pop(0)
+        sys.dont_write_bytecode = dont_write_bytecode
+        return obj
 
 
 def from_config(bot_class: str, config: dict) -> ChatBotBase:
