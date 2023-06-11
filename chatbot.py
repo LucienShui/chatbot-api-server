@@ -133,10 +133,12 @@ def import_remote(module_path: str, config: dict):
 def from_config(bot_class: str, config: dict) -> ChatBotBase:
     if bot_class in supported_class.keys():
         return supported_class[bot_class](**config)
-    elif os.path.exists(''):
-        pass
     else:
-        raise ModuleNotFoundError(f"{bot_class} not in {list(supported_class.keys())}")
+        try:
+            return import_remote(bot_class, config)
+        except Exception as e:
+            logger.exception(e)
+            raise ModuleNotFoundError(f"{bot_class} not in {list(supported_class.keys())}")
 
 
 def from_bot_map_config(bot_map_config: Dict[str, dict]) -> Dict[str, ChatBotBase]:
