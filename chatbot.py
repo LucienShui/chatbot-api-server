@@ -5,6 +5,7 @@ from typing import Dict, List, Any
 from util import logger
 from json import dumps
 from functools import partial
+import os
 
 dumps = partial(dumps, separators=(',', ':'), ensure_ascii=False)
 
@@ -104,9 +105,38 @@ class ChatRemote(ChatBotBase):
 supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, ChatRemote, ChatGLM]}
 
 
+def import_remote(module_path: str, config: dict):
+    """
+    Args:
+        module_path:
+            a path like "/tmp/test_model/model.Bot"
+            which model means model.py, Bot is a class's name inside model.py
+        config:
+            module's __init__ parameters
+    Return:
+        an object of module
+    """
+    import sys
+    base_dir, module = os.path.split(module_path)
+    filename, class_name = os.path.splitext(module)
+    class_name = class_name.replace('.', '')
+    dont_write_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True  # do not generate __pycache__ inside directory
+    sys.path.insert(0, base_dir)
+    exec(f'from {filename} import {class_name}')
+    obj = eval(class_name)(**config)
+    sys.path.pop(0)
+    sys.dont_write_bytecode = dont_write_bytecode
+    return obj
+
+
 def from_config(bot_class: str, config: dict) -> ChatBotBase:
-    assert bot_class in supported_class.keys(), f"{bot_class} not in {list(supported_class.keys())}"
-    return supported_class[bot_class](**config)
+    if bot_class in supported_class.keys():
+        return supported_class[bot_class](**config)
+    elif os.path.exists(''):
+        pass
+    else:
+        raise ModuleNotFoundError(f"{bot_class} not in {list(supported_class.keys())}")
 
 
 def from_bot_map_config(bot_map_config: Dict[str, dict]) -> Dict[str, ChatBotBase]:
