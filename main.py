@@ -62,7 +62,7 @@ async def chat(bot: str, request: Request):
     }
 
 
-@app.websocket("/api/stream_chat/{bot}")
+@app.websocket("/api/chat/{bot}/ws")
 async def steam_chat(websocket: WebSocket, bot: str):
     """
     input: JSON String of {"query": "", "history": []}
