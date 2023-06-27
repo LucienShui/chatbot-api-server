@@ -4,7 +4,8 @@ services:
   chatbot-api-server:
     image: chatbot-cpu-runtime:latest
     container_name: chatbot-api-server
-    build: .
+    build:
+      dockerfile: cpu.Dockerfile
     volumes:
       - ./:/app
       - /etc/localtime:/etc/localtime:ro
