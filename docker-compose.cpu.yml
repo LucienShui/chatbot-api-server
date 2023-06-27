@@ -2,7 +2,7 @@ version: "3"
 
 services:
   chatbot-api-server:
-    image: chatbot-gpu-runtime:latest
+    image: chatbot-cpu-runtime:latest
     container_name: chatbot-api-server
     build: .
     volumes:
@@ -16,10 +16,3 @@ services:
     command: ["main.py"]
     ports:
       - "8000:8000"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["0"]
-              capabilities: [gpu]
