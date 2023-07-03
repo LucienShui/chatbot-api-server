@@ -47,7 +47,7 @@ class ChatGPTBase(ChatBotBase):
         self.url: str = url
         self.headers: Dict[str, str] = headers
 
-    def make_request(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
         raise NotImplementedError
 
     @classmethod
@@ -62,7 +62,7 @@ class ChatGPTBase(ChatBotBase):
 
     def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
         messages: list = self.get_messages(query, history, system)
-        request: dict = self.make_request(messages)
+        request: dict = self.make_request(messages, parameters)
         start_time = time.time()
         raw_response: Response = post(self.url, json=request, headers=self.headers)
         if raw_response.status_code != 200:
@@ -88,15 +88,15 @@ class SpecialChatGPT(ChatGPTBase):
         self.organization: str = organization
         super().__init__(url=urljoin(endpoint, '/v1'), headers={})
 
-    def make_request(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
-        return {"model": self.model, "messages": messages}
+    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
+        return {"model": self.model, "messages": messages, **(parameters or {})}
 
     def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
         messages = self.get_messages(query, history, system)
-        request: dict = self.make_request(messages)
+        request: dict = self.make_request(messages, parameters)
         start_time = time.time()
-        response = openai.ChatCompletion.create(
-            model=self.model, messages=messages, stream=True, api_base=self.url, api_key=self.api_key)
+        response = openai.ChatCompletion.create(model=self.model, messages=messages, stream=True,
+                                                api_base=self.url, api_key=self.api_key, **(parameters or {}))
         message = ''
         chunk: OpenAIObject = OpenAIObject()
         for chunk in response:
@@ -131,16 +131,16 @@ class ChatGPT(ChatGPTBase):
         headers = {'Authorization': f'Bearer {api_key}', 'OpenAI-Organization': organization}
         super().__init__(url=urljoin(endpoint, '/v1/chat/completions'), headers=headers)
 
-    def make_request(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
-        return {"model": self.model, "messages": messages}
+    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
+        return {"model": self.model, "messages": messages, **(parameters or {})}
 
 
 class AzureChatGPT(ChatGPTBase):
     def __init__(self, api_key: str, endpoint: str):
         super().__init__(endpoint, {'api-key': api_key})
 
-    def make_request(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
-        return {"messages": messages}
+    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
+        return {"messages": messages, **(parameters or {})}
 
 
 class ChatRemote(ChatBotBase):
@@ -151,7 +151,7 @@ class ChatRemote(ChatBotBase):
 
     def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
         history = self.preset_history + (history or [])
-        request: dict = {"query": query, "history": history, "system": system}
+        request: dict = {"query": query, "history": history, "system": system, "parameters": parameters}
         start_time = time.time()
         response: dict = post(self.url, json=request).json()
         duration = time.time() - start_time
