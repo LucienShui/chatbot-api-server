@@ -90,7 +90,7 @@ async def steam_chat(websocket: WebSocket, bot: str):
 
 def main():
     uvicorn.run(
-        app,
+        'main:app',
         host=config.get('server', {}).get('host', '0.0.0.0'),
         port=config.get('server', {}).get('port', 8000),
         workers=config.get('server', {}).get('workers', None)
