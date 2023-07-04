@@ -89,7 +89,12 @@ async def steam_chat(websocket: WebSocket, bot: str):
 
 
 def main():
-    uvicorn.run(app, host=os.environ.get('HOST', '0.0.0.0'), port=int(os.environ.get('PORT', 8000)))
+    uvicorn.run(
+        app,
+        host=config.get('server', {}).get('host', '0.0.0.0'),
+        port=config.get('server', {}).get('port', 8000),
+        workers=config.get('server', {}).get('workers', None)
+    )
 
 
 if __name__ == '__main__':
