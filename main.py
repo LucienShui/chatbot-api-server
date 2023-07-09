@@ -39,13 +39,7 @@ model_list: ModelList = ModelList(data=[ModelCard(id=bot_name) for bot_name in b
 app = FastAPI()
 logger = logging.getLogger(__name__)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware)
 
 
 @app.exception_handler(Exception)
@@ -114,7 +108,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     system = prev_messages.pop(0).content if len(prev_messages) > 0 and prev_messages[0].role == "system" else None
 
     history = []
-    assert len(prev_messages) % 2 != 0, f'context length should be even, got {len(prev_messages)}'
+    assert len(prev_messages) % 2 == 0, f'context length should be even, got {len(prev_messages)}'
     for i in range(0, len(prev_messages), 2):
         if prev_messages[i].role == "user" and prev_messages[i + 1].role == "assistant":
             history.append([prev_messages[i].content, prev_messages[i + 1].content])
