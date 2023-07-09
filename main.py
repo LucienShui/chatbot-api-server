@@ -1,26 +1,19 @@
 import logging
 import os
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Annotated
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, status
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, status, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
+from sse_starlette.sse import EventSourceResponse
 
-from openai_object import ChatCompletionResponseStreamChoice, DeltaMessage, ChatCompletionResponse, \
-    ChatCompletionRequest, ChatCompletionResponseChoice, ChatMessage, ModelList, ModelCard
-from util import load_config
 from chatbot import from_bot_map_config, ChatBotBase
-import time
-import torch
-import uvicorn
-from pydantic import BaseModel, Field
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Literal, Optional, Union
-from transformers import AutoTokenizer, AutoModel
-from sse_starlette.sse import ServerSentEvent, EventSourceResponse
+from openai_object import (
+    ChatCompletionResponseStreamChoice, DeltaMessage, ChatCompletionResponse, ChatCompletionRequest,
+    ChatCompletionResponseChoice, ChatMessage, ModelList, ModelCard
+)
+from util import load_config
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -34,7 +27,7 @@ logging.basicConfig(
 config = load_config(os.environ['CONFIG_FILE'])
 bot_map: Dict[str, ChatBotBase] = from_bot_map_config(config['bot_map'])
 model_list: ModelList = ModelList(data=[ModelCard(id=bot_name) for bot_name in bot_map.keys()])
-
+token_list: list = config['token_list']
 
 app = FastAPI()
 logger = logging.getLogger(__name__)
@@ -54,7 +47,9 @@ async def exception_handler(request: Request, e: Exception) -> Response:
 
 
 @app.post('/api/chat/{model}')
-async def chat(model: str, request: Request):
+async def chat(model: str, request: Request, token: Annotated[str | None, Header()]):
+    if token not in token_list:
+        raise HTTPException(status_code=401, detail="Invalid API key")
     json_request: Dict[str, Any] = await request.json()
     query: str = json_request['query']
     history: List[List[str]] = json_request.get('history', [])
@@ -68,12 +63,14 @@ async def chat(model: str, request: Request):
 
 
 @app.websocket("/api/chat/{model}/ws")
-async def steam_chat(websocket: WebSocket, model: str):
+async def steam_chat(websocket: WebSocket, model: str, token: Annotated[str | None, Header()]):
     """
     input: JSON String of {"query": "", "history": []}
     output: JSON String of {"response": "", "history": [], "status": 200}
         status 200 stand for response ended, else not
     """
+    if token not in token_list:
+        raise HTTPException(status_code=401, detail="Invalid API key")
     await websocket.accept()
     try:
         while True:
@@ -99,7 +96,9 @@ async def list_models():
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-async def create_chat_completion(request: ChatCompletionRequest):
+async def create_chat_completion(request: ChatCompletionRequest, authorization: Annotated[str | None, Header()]):
+    if not (authorization.startswith('Bearer ') and authorization.replace('Bearer ', '') in token_list):
+        raise HTTPException(status_code=401, detail="Invalid API key")
     if request.messages[-1].role != "user":
         raise HTTPException(status_code=400, detail="Invalid request")
     query = request.messages[-1].content
