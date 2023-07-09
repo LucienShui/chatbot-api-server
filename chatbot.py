@@ -1,15 +1,11 @@
 import os
 import time
 from functools import partial
-from http.client import HTTPException
 from json import dumps
-from typing import Dict, List, Any
-from urllib.parse import urljoin
+from typing import Dict, List
 
 import openai
-from openai.openai_object import OpenAIObject
 from requests.api import post
-from requests.models import Response
 
 from util import logger
 
@@ -39,16 +35,18 @@ class ChatGLM(ChatBotBase):
         response, history = self.model.chat(self.tokenizer, query, history=history, **parameters)
         return response
 
+    def stream_chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+        for response, _ in self.model.stream_chat(self.tokenizer, query, history=history, **parameters):
+            yield response
 
-class ChatGPTBase(ChatBotBase):
 
-    def __init__(self, url: str, headers: Dict[str, str]):
+class ChatGPT(ChatBotBase):
+
+    def __init__(self, model: str, api_key: str, api_base: str = 'https://api.openai-proxy.com/v1'):
         super().__init__()
-        self.url: str = url
-        self.headers: Dict[str, str] = headers
-
-    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
-        raise NotImplementedError
+        self.model: str = model
+        self.api_base: str = api_base
+        self.api_key: str = api_key
 
     @classmethod
     def get_messages(cls, query: str, history: list = None, system: str = None) -> List[Dict[str, str]]:
@@ -62,85 +60,59 @@ class ChatGPTBase(ChatBotBase):
 
     def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
         messages: list = self.get_messages(query, history, system)
-        request: dict = self.make_request(messages, parameters)
         start_time = time.time()
-        raw_response: Response = post(self.url, json=request, headers=self.headers)
-        if raw_response.status_code != 200:
-            try:
-                response: dict = raw_response.json()
-            except Exception as _:
-                raise HTTPException(f'{raw_response.status_code}: {raw_response.reason}')
-            raise HTTPException(f"Error: {response['error']['message']}")
-        response: dict = raw_response.json()
-        duration = time.time() - start_time
-        log_msg = f"request = {dumps(request)}, response = {dumps(response)}, cost = {round(duration * 1000, 2)} ms"
-        self.logger.info(log_msg)
-        message: str = response['choices'].pop(0)['message']['content']
-        return message
-
-
-class SpecialChatGPT(ChatGPTBase):
-    def __init__(self, api_key: str, endpoint: str = 'https://api.openai-proxy.com',
-                 model: str = "gpt-3.5-turbo", organization: str = None):
-        assert model in ["gpt-4-0314", "gpt-4", "gpt-3.5-turbo-0301", "gpt-3.5-turbo"]
-        self.model: str = model
-        self.api_key: str = api_key
-        self.organization: str = organization
-        super().__init__(url=urljoin(endpoint, '/v1'), headers={})
-
-    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
-        return {"model": self.model, "messages": messages, **(parameters or {})}
-
-    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
-        messages = self.get_messages(query, history, system)
-        request: dict = self.make_request(messages, parameters)
-        start_time = time.time()
-        response = openai.ChatCompletion.create(model=self.model, messages=messages, stream=True,
-                                                api_base=self.url, api_key=self.api_key, **(parameters or {}))
-        message = ''
-        chunk: OpenAIObject = OpenAIObject()
-        for chunk in response:
-            if chunk['choices'][0]['finish_reason'] is not None:
-                break
-            delta_content = chunk['choices'][0]['delta']['content']
-            message += delta_content
-        duration = time.time() - start_time
-        log_msg = f"request = {dumps(request)}, response = {dumps(chunk.to_dict())}, " \
-                  f"cost = {round(duration * 1000, 2)} ms"
-        self.logger.info(log_msg)
+        response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
+                                                api_key=self.api_key, **parameters or {})
+        message: str = response['choices'][0]['message']['content']
+        self.logger.info(dumps({'query': query, 'history': history, 'system': system, 'parameters': parameters,
+                                'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
         return message
 
     def stream_chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
         messages = self.get_messages(query, history, system)
-        response = openai.ChatCompletion.create(
-            model=self.model, messages=messages, stream=True, api_base=self.url, api_key=self.api_key)
+        start_time = time.time()
+        response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
+                                                api_key=self.api_key, stream=True, **parameters or {})
         message = ''
         for chunk in response:
             if chunk['choices'][0]['finish_reason'] is not None:
                 break
-            delta_content = chunk['choices'][0]['delta']['content']
+            if 'content' not in (delta := chunk['choices'][0]['delta']):
+                continue
+            delta_content = delta['content']
             message += delta_content
             yield message
 
-
-class ChatGPT(ChatGPTBase):
-    def __init__(self, api_key: str, endpoint: str = 'https://api.openai-proxy.com',
-                 model: str = "gpt-3.5-turbo", organization: str = None):
-        assert model in ["gpt-4-0314", "gpt-4", "gpt-3.5-turbo-0301", "gpt-3.5-turbo"]
-        self.model: str = model
-        headers = {'Authorization': f'Bearer {api_key}', 'OpenAI-Organization': organization}
-        super().__init__(url=urljoin(endpoint, '/v1/chat/completions'), headers=headers)
-
-    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
-        return {"model": self.model, "messages": messages, **(parameters or {})}
+        self.logger.info(dumps({'query': query, 'history': history, 'system': system, 'parameters': parameters,
+                                'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
 
 
-class AzureChatGPT(ChatGPTBase):
-    def __init__(self, api_key: str, endpoint: str):
-        super().__init__(endpoint, {'api-key': api_key})
+class SpecialChatGPT(ChatGPT):
+    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+        message = ''
+        for message in self.stream_chat(query, history, system, parameters):
+            pass
+        return message
 
-    def make_request(self, messages: List[Dict[str, str]], parameters: dict = None) -> Dict[str, Any]:
-        return {"messages": messages, **(parameters or {})}
+
+class AzureChatGPT(ChatGPT):
+    def __init__(self, engine: str, api_key: str, api_base: str, api_version: str):
+        super().__init__(engine, api_key, api_base)
+        self.api_version: str = api_version
+        self.api_type: str = 'azure'
+
+    def parameters_wrapper(self, parameters: dict) -> dict:
+        parameters: dict = parameters or {}
+        parameters['api_type'] = self.api_type
+        parameters['api_version'] = self.api_version
+        parameters['engine'] = self.model
+        return parameters
+
+    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+        return super().chat(query, history, system, self.parameters_wrapper(parameters))
+
+    def stream_chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+        return super().stream_chat(query, history, system, self.parameters_wrapper(parameters))
 
 
 class ChatRemote(ChatBotBase):

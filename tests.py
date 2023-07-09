@@ -25,5 +25,26 @@ class Bot(ChatBotBase):
             self.assertEqual(text, obj.chat(text))
 
 
+class TestChatBot(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        from chatbot import from_bot_map_config
+        from util import load_config
+        config = load_config('config.json')
+        cls.bot_map = from_bot_map_config(config['bot_map'])
+
+    def test_gpt4_chat(self):
+        print(self.bot_map['gpt-4'].chat('你好'))
+        print('=' * 16)
+        for response in self.bot_map['gpt-4'].stream_chat('你好'):
+            print(response)
+
+    def test_gpt3_chat(self):
+        print(self.bot_map['gpt-3'].chat('你好'))
+        print('=' * 16)
+        for response in self.bot_map['gpt-3'].stream_chat('你好'):
+            print(response)
+
+
 if __name__ == '__main__':
     unittest.main()
