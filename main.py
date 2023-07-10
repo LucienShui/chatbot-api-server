@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Annotated
 
 import uvicorn
@@ -15,6 +16,11 @@ from openai_object import (
 )
 from util import load_config
 
+try:
+    import torch
+except (ImportError, ModuleNotFoundError):
+    torch = None
+
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO,
@@ -29,7 +35,16 @@ bot_map: Dict[str, ChatBotBase] = from_bot_map_config(config['bot_map'])
 model_list: ModelList = ModelList(data=[ModelCard(id=bot_name) for bot_name in bot_map.keys()])
 token_list: list = config['token_list']
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_):  # collects GPU memory
+    yield
+    if torch is not None and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
+
+app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 app.add_middleware(
