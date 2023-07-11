@@ -1,6 +1,5 @@
 import logging
 import os
-from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Annotated
 
 import uvicorn
@@ -32,19 +31,10 @@ logging.basicConfig(
 
 config = load_config(os.environ['CONFIG_FILE'])
 bot_map: Dict[str, ChatBotBase] = {}
-model_list: ModelList = ModelList(data=[ModelCard(id=bot_name) for bot_name in config['bot_map'].keys()])
+model_list: ModelList = ModelList(data=[])
 token_list: list = config['token_list']
 
-
-@asynccontextmanager
-async def lifespan(_):  # collects GPU memory
-    yield
-    if torch is not None and torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 logger = logging.getLogger(__name__)
 
 app.add_middleware(
@@ -65,6 +55,13 @@ async def exception_handler(request: Request, e: Exception) -> Response:
             "status": 500
         }
     )
+
+
+@app.on_event('startup')
+def init():
+    for k, v in from_bot_map_config(config['bot_map']).items():
+        model_list.data.append(ModelCard(id=k))
+        bot_map[k] = v
 
 
 @app.post('/api/chat/{model}')
@@ -186,8 +183,6 @@ async def stream_chat(query: str, history: List[List[str]], system: str, paramet
 
 
 def main():
-    for k, v in from_bot_map_config(config['bot_map']).items():
-        bot_map[k] = v
     uvicorn.run(
         'main:app',
         host=config.get('server', {}).get('host', '0.0.0.0'),
