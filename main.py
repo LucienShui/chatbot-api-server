@@ -31,8 +31,8 @@ logging.basicConfig(
 )
 
 config = load_config(os.environ['CONFIG_FILE'])
-bot_map: Dict[str, ChatBotBase] = from_bot_map_config(config['bot_map'])
-model_list: ModelList = ModelList(data=[ModelCard(id=bot_name) for bot_name in bot_map.keys()])
+bot_map: Dict[str, ChatBotBase] = ...
+model_list: ModelList = ModelList(data=[ModelCard(id=bot_name) for bot_name in config['bot_map'].keys()])
 token_list: list = config['token_list']
 
 
@@ -185,7 +185,13 @@ async def stream_chat(query: str, history: List[List[str]], system: str, paramet
     yield '[DONE]'
 
 
+def init():
+    global bot_map
+    bot_map = from_bot_map_config(config['bot_map'])
+
+
 def main():
+    init()
     uvicorn.run(
         'main:app',
         host=config.get('server', {}).get('host', '0.0.0.0'),
