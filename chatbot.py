@@ -28,7 +28,7 @@ class ChatGLM(ChatBotBase):
         from transformers import AutoTokenizer, AutoModel, PreTrainedTokenizer, PreTrainedModel
         super().__init__()
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(pretrained, trust_remote_code=True)
-        self.model: PreTrainedModel = AutoModel.from_pretrained(pretrained, trust_remote_code=True).half().cuda()
+        self.model: PreTrainedModel = AutoModel.from_pretrained(pretrained, trust_remote_code=True, device='cuda')
         self.model = self.model.eval()
 
     def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
