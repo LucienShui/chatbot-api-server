@@ -78,12 +78,18 @@ class BaichuanChat(ChatBotBase):
         self.model = self.model.quantize(quantize).cuda() if quantize else self.model.cuda()
         self.model.generation_config = GenerationConfig.from_pretrained(pretrained)
 
+    def to_generation_config(self, parameters: dict = None):
+        from transformers.generation.utils import GenerationConfig
+        generation_config = GenerationConfig.from_dict({**self.model.generation_config.to_dict(), **(parameters or {})})
+        return generation_config
+
     def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        response = self.model.chat(self.tokenizer, messages, **parameters)
+        response = self.model.chat(self.tokenizer, messages, generation_config=self.to_generation_config(parameters))
         return response
 
     def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        for response in self.model.chat(self.tokenizer, messages, **parameters):
+        for response in self.model.chat(
+                self.tokenizer, messages, stream=True, generation_config=self.to_generation_config(parameters)):
             yield response
 
 
