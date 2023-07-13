@@ -87,7 +87,7 @@ class BaichuanChat(ChatBotBase):
     def process_messages(cls, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
         result = []
         for message in messages:
-            if message['role'] == Converter.sys:
+            if message['role'] == Converter.system:
                 result.append({'role': Converter.user, 'content': message['content']})
             else:
                 result.append(message)
