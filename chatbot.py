@@ -216,9 +216,27 @@ def from_config(bot_class: str, config: dict) -> ChatBotBase:
             raise ModuleNotFoundError(f"{bot_class} not in {list(supported_class.keys())}")
 
 
-def from_bot_map_config(bot_map_config: Dict[str, dict]) -> Dict[str, ChatBotBase]:
+def check_alias(alias: Dict[str, str], config: Dict[str, str]) -> bool:
+    link_count: Dict[str, int] = {}
+    for link, source in alias.items():
+        assert source in config, f"illegal alias: {source} not found in bot_map"
+        link_count[link] = link_count.get(link, 0) + 1
+    for link, count in link_count.items():
+        if count > 1:
+            raise AssertionError(f"duplicated alias: {link}")
+    return True
+
+
+def from_bot_map_config(bot_map_config: Dict[str, dict], alias: Dict[str, str] = None,
+                        disable: List[str] = None) -> Dict[str, ChatBotBase]:
+    alias = alias or {}
+    disable = disable or []
+    config = {k: v for k, v in bot_map_config.items() if k not in disable}
+    check_alias(alias, config)
     bot_map: Dict[str, ChatBotBase] = {}
     for bot, config in bot_map_config.items():
         bot_class = config.pop('class')
         bot_map[bot] = from_config(bot_class, config)
+    for link, source in alias.items():
+        bot_map[link] = bot_map[source]
     return bot_map

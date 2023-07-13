@@ -50,7 +50,7 @@ async def exception_handler(_: Request, e: Exception) -> Response:
 
 @app.on_event('startup')
 def init():
-    for k, v in from_bot_map_config(config['bot_map']).items():
+    for k, v in from_bot_map_config(config['bot_map'], config.get('alias', {}), config.get('disable', [])).items():
         model_list.data.append(ModelCard(id=k))
         bot_map[k] = v
 
