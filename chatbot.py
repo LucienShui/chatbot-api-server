@@ -83,13 +83,24 @@ class BaichuanChat(ChatBotBase):
         generation_config = GenerationConfig.from_dict({**self.model.generation_config.to_dict(), **(parameters or {})})
         return generation_config
 
+    @classmethod
+    def process_messages(cls, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        result = []
+        for message in messages:
+            if message['role'] == Converter.sys:
+                result.append({'role': Converter.user, 'content': message['content']})
+            else:
+                result.append(message)
+        return result
+
     def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        response = self.model.chat(self.tokenizer, messages, generation_config=self.to_generation_config(parameters))
+        response = self.model.chat(
+            self.tokenizer, self.process_messages(messages), generation_config=self.to_generation_config(parameters))
         return response
 
     def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        for response in self.model.chat(
-                self.tokenizer, messages, stream=True, generation_config=self.to_generation_config(parameters)):
+        for response in self.model.chat(self.tokenizer, self.process_messages(messages), stream=True,
+                                        generation_config=self.to_generation_config(parameters)):
             yield response
 
 
