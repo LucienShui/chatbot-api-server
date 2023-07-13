@@ -231,10 +231,10 @@ def from_bot_map_config(bot_map_config: Dict[str, dict], alias: Dict[str, str] =
                         disable: List[str] = None) -> Dict[str, ChatBotBase]:
     alias = alias or {}
     disable = disable or []
-    config = {k: v for k, v in bot_map_config.items() if k not in disable}
-    check_alias(alias, config)
+    map_config = {k: v for k, v in bot_map_config.items() if k not in disable}
+    check_alias(alias, map_config)
     bot_map: Dict[str, ChatBotBase] = {}
-    for bot, config in bot_map_config.items():
+    for bot, config in map_config.items():
         bot_class = config.pop('class')
         bot_map[bot] = from_config(bot_class, config)
     for link, source in alias.items():
