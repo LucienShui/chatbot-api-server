@@ -5,3 +5,4 @@ uvicorn~=0.22.0
 openai~=0.27.8
 sse-starlette~=1.6.1
 pydantic~=1.10.7
+transformers_stream_generator~=0.0.4

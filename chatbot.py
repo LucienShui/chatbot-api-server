@@ -2,40 +2,107 @@ import os
 import time
 from functools import partial
 from json import dumps
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import openai
-from requests.api import post
 
 from util import logger
 
 dumps = partial(dumps, separators=(',', ':'), ensure_ascii=False)
 
 
+class Converter:
+    system: str = 'system'
+    user: str = 'user'
+    assistant: str = 'assistant'
+
+    @classmethod
+    def to_messages(cls, query: str, history: list = None, system: str = None) -> List[Dict[str, str]]:
+        history = history or []
+        messages: list = [{'role': cls.system, 'content': system}] if system else []
+        for q, a in history:
+            messages.append({"role": cls.user, "content": q})
+            messages.append({"role": cls.assistant, "content": a})
+        messages.append({"role": cls.user, "content": query})
+        return messages
+
+    @classmethod
+    def from_messages(cls, messages: List[Dict[str, str]]) -> Tuple[str, List[List[str]]]:
+        line_breaker = '\n\n'
+        assert messages[-1]['role'] == cls.user, 'last query must from user for ChatGLM'
+        query = messages[-1]['content']
+        history: List[List[str]] = []
+        for message in messages[:-1]:
+            role = message['role']
+            content = message['content']
+            if role in [cls.user, cls.system]:
+                if len(history) == 0 or len(history[-1]) == 2:
+                    history.append([content])
+                else:
+                    history[-1][0] += line_breaker + content
+            elif role in [cls.assistant]:
+                if len(history) == 0:
+                    raise AssertionError('first query must from user or system for ChatGLM')
+                if len(history[-1]) == 1:
+                    history[-1].append(content)
+                else:
+                    history[-1][1] += line_breaker + content
+
+        if len(history) > 0 and len(history[-1]) == 1:
+            query = history.pop(-1)[0] + line_breaker + query
+
+        return query, history
+
+
 class ChatBotBase:
     def __init__(self):
         self.logger = logger.getChild(self.__class__.__name__)
 
-    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         raise NotImplementedError
 
-    def stream_chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         raise NotImplementedError
+
+
+class BaichuanChat(ChatBotBase):
+    def __init__(self, pretrained: str, quantize: int = None):
+        super(BaichuanChat, self).__init__()
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers.generation.utils import GenerationConfig
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            pretrained, use_fast=False, trust_remote_code=True)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            pretrained, torch_dtype=torch.float16, trust_remote_code=True)
+        self.model = self.model.quantize(quantize).cuda() if quantize else self.model.cuda()
+        self.model.generation_config = GenerationConfig.from_pretrained(pretrained)
+
+    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        response = self.model.chat(self.tokenizer, messages, **parameters)
+        return response
+
+    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        for response in self.model.chat(self.tokenizer, messages, **parameters):
+            yield response
 
 
 class ChatGLM(ChatBotBase):
+
     def __init__(self, pretrained: str):
         from transformers import AutoTokenizer, AutoModel, PreTrainedTokenizer, PreTrainedModel
-        super().__init__()
+        super(ChatGLM, self).__init__()
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(pretrained, trust_remote_code=True)
         self.model: PreTrainedModel = AutoModel.from_pretrained(pretrained, trust_remote_code=True, device='cuda')
         self.model = self.model.eval()
 
-    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        query, history = Converter.from_messages(messages)
         response, history = self.model.chat(self.tokenizer, query, history=history, **parameters)
         return response
 
-    def stream_chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
+    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        query, history = Converter.from_messages(messages)
         for response, _ in self.model.stream_chat(self.tokenizer, query, history=history, **parameters):
             yield response
 
@@ -48,28 +115,16 @@ class ChatGPT(ChatBotBase):
         self.api_base: str = api_base
         self.api_key: str = api_key
 
-    @classmethod
-    def get_messages(cls, query: str, history: list = None, system: str = None) -> List[Dict[str, str]]:
-        history = history or []
-        messages: list = [{'role': 'system', 'content': system}] if system else []
-        for q, a in history:
-            messages.append({"role": "user", "content": q})
-            messages.append({"role": "assistant", "content": a})
-        messages.append({"role": "user", "content": query})
-        return messages
-
-    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
-        messages: list = self.get_messages(query, history, system)
+    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         start_time = time.time()
-        response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
-                                                api_key=self.api_key, **parameters or {})
-        message: str = response['choices'][0]['message']['content']
-        self.logger.info(dumps({'query': query, 'history': history, 'system': system, 'parameters': parameters,
-                                'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
-        return message
+        openai_response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
+                                                       api_key=self.api_key, **parameters or {})
+        content: str = openai_response['choices'][0]['message']['content']
+        self.logger.info(dumps({'messages': messages, 'parameters': parameters,
+                                'response': content, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
+        return content
 
-    def stream_chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
-        messages = self.get_messages(query, history, system)
+    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         start_time = time.time()
         response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
                                                 api_key=self.api_key, stream=True, **parameters or {})
@@ -83,16 +138,16 @@ class ChatGPT(ChatBotBase):
             message += delta_content
             yield message
 
-        self.logger.info(dumps({'query': query, 'history': history, 'system': system, 'parameters': parameters,
-                                'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
+            self.logger.info(dumps({'messages': messages, 'parameters': parameters,
+                                    'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
 
 
 class SpecialChatGPT(ChatGPT):
-    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
-        message = ''
-        for message in self.stream_chat(query, history, system, parameters):
+    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        response = ''
+        for response in self.stream_chat(messages, parameters):
             pass
-        return message
+        return response
 
 
 class AzureChatGPT(ChatGPT):
@@ -108,32 +163,14 @@ class AzureChatGPT(ChatGPT):
         parameters['engine'] = self.model
         return parameters
 
-    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
-        return super().chat(query, history, system, self.parameters_wrapper(parameters))
+    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        return super().chat(messages, self.parameters_wrapper(parameters))
 
-    def stream_chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
-        return super().stream_chat(query, history, system, self.parameters_wrapper(parameters))
-
-
-class ChatRemote(ChatBotBase):
-    def __init__(self, url: str, preset_history: list = None):
-        super().__init__()
-        self.url = url
-        self.preset_history = preset_history or []
-
-    def chat(self, query: str, history: list = None, system: str = None, parameters: dict = None) -> str:
-        history = self.preset_history + (history or [])
-        request: dict = {"query": query, "history": history, "system": system, "parameters": parameters}
-        start_time = time.time()
-        response: dict = post(self.url, json=request).json()
-        duration = time.time() - start_time
-        log_msg = f"request = {dumps(request)}, response = {dumps(response)}, cost = {round(duration * 1000, 2)} ms"
-        self.logger.info(log_msg)
-        message: str = response['response']
-        return message
+    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        return super().stream_chat(messages, self.parameters_wrapper(parameters))
 
 
-supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, ChatRemote, ChatGLM, SpecialChatGPT]}
+supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, BaichuanChat, ChatGLM, SpecialChatGPT]}
 
 
 def import_remote(module_path: str, config: dict):

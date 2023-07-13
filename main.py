@@ -8,28 +8,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sse_starlette.sse import EventSourceResponse
 
-from chatbot import from_bot_map_config, ChatBotBase
+from chatbot import from_bot_map_config, ChatBotBase, Converter
 from openai_object import (
     ChatCompletionResponseStreamChoice, DeltaMessage, ChatCompletionResponse, ChatCompletionRequest,
     ChatCompletionResponseChoice, ChatMessage, ModelList, ModelCard
 )
-from util import load_config
+from util import load_config, logger
 
 try:
     import torch
 except (ImportError, ModuleNotFoundError):
     torch = None
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)s %(message)s",
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
-)
-
-config = load_config(os.environ['CONFIG_FILE'])
+config = load_config(os.environ.get('CONFIG_FILE', 'config.json'))
 bot_map: Dict[str, ChatBotBase] = {}
 model_list: ModelList = ModelList(data=[])
 token_list: list = config['token_list']
@@ -47,7 +38,7 @@ app.add_middleware(
 
 
 @app.exception_handler(Exception)
-async def exception_handler(request: Request, e: Exception) -> Response:
+async def exception_handler(_: Request, e: Exception) -> Response:
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -71,8 +62,9 @@ async def chat(model: str, request: Request, token: Annotated[str | None, Header
     json_request: Dict[str, Any] = await request.json()
     query: str = json_request['query']
     history: List[List[str]] = json_request.get('history', [])
+    system: str = json_request.get('system', None)
     parameters: Dict[str, Any] = json_request.get('parameters', {})
-    response = bot_map[model].chat(query, history=history, parameters=parameters or {})
+    response = bot_map[model].chat(Converter.to_messages(query, history, system), parameters=parameters or {})
     return {
         "response": response,
         "history": history + [[query, response]],
@@ -96,8 +88,10 @@ async def steam_chat(websocket: WebSocket, model: str, token: Annotated[str | No
             query: str = json_request['query']
             history: list = json_request['history']
             parameters: dict = json_request.get('parameters', {})
+            system: str = json_request.get('system', None)
             logger.info(f'{websocket.client.host}:{websocket.client.port} query = {query}')
-            for response in bot_map[model].stream_chat(query, history=history, parameters=parameters):
+            for response in bot_map[model].stream_chat(
+                    Converter.to_messages(query, history, system), parameters=parameters or {}):
                 await websocket.send_json({
                     "response": response,
                     "history": history + [[query, response]],
@@ -117,26 +111,14 @@ async def list_models():
 async def create_chat_completion(request: ChatCompletionRequest, authorization: Annotated[str | None, Header()]):
     if not (authorization.startswith('Bearer ') and authorization.replace('Bearer ', '') in token_list):
         raise HTTPException(status_code=401, detail="Invalid API key")
-    if request.messages[-1].role != "user":
-        raise HTTPException(status_code=400, detail="Invalid request")
-    query = request.messages[-1].content
-
-    prev_messages = request.messages[:-1]
-    system = prev_messages.pop(0).content if len(prev_messages) > 0 and prev_messages[0].role == "system" else None
-
-    history = []
-    assert len(prev_messages) % 2 == 0, f'context length should be even, got {len(prev_messages)}'
-    for i in range(0, len(prev_messages), 2):
-        if prev_messages[i].role == "user" and prev_messages[i + 1].role == "assistant":
-            history.append([prev_messages[i].content, prev_messages[i + 1].content])
-
-    parameters = {}
+    parameters = {'temperature': request.temperature, 'top_p': request.top_p, 'max_length': request.max_length}
+    messages = [message.__dict__ for message in request.messages]
 
     if request.stream:
-        generate = stream_chat(query, history, system, parameters, request.model)
+        generate = stream_chat(messages, parameters, request.model)
         return EventSourceResponse(generate, media_type="text/event-stream")
 
-    response = bot_map[request.model].chat(query, history, system, parameters)
+    response = bot_map[request.model].chat(messages, parameters)
     choice_data = ChatCompletionResponseChoice(
         index=0,
         message=ChatMessage(role="assistant", content=response),
@@ -146,7 +128,7 @@ async def create_chat_completion(request: ChatCompletionRequest, authorization: 
     return ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion")
 
 
-async def stream_chat(query: str, history: List[List[str]], system: str, parameters: dict, model_id: str):
+async def stream_chat(messages: List[Dict[str, str]], parameters: dict, model_id: str):
     choice_data = ChatCompletionResponseStreamChoice(
         index=0,
         delta=DeltaMessage(role="assistant"),
@@ -157,7 +139,7 @@ async def stream_chat(query: str, history: List[List[str]], system: str, paramet
 
     current_length = 0
 
-    for new_response in bot_map[model_id].stream_chat(query, history=history, system=system, parameters=parameters):
+    for new_response in bot_map[model_id].stream_chat(messages, parameters=parameters):
         if len(new_response) == current_length:
             continue
 
