@@ -1,5 +1,7 @@
 # python==3.10
-requests~=2.30.0
-fastapi~=0.95.1
+requests~=2.31.0
+fastapi~=0.100.0
 uvicorn~=0.22.0
 openai~=0.27.8
+sse-starlette~=1.6.1
+pydantic~=1.10.7
