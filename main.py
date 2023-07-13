@@ -111,7 +111,9 @@ async def list_models():
 async def create_chat_completion(request: ChatCompletionRequest, authorization: Annotated[str | None, Header()]):
     if not (authorization.startswith('Bearer ') and authorization.replace('Bearer ', '') in token_list):
         raise HTTPException(status_code=401, detail="Invalid API key")
-    parameters = {'temperature': request.temperature, 'top_p': request.top_p, 'max_length': request.max_length}
+    parameters: dict = {}
+    for k in ['temperature', 'top_p', 'max_length']:
+        parameters[k] = getattr(request, k)
     messages = [message.__dict__ for message in request.messages]
 
     if request.stream:
