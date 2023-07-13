@@ -113,7 +113,9 @@ async def create_chat_completion(request: ChatCompletionRequest, authorization: 
         raise HTTPException(status_code=401, detail="Invalid API key")
     parameters: dict = {}
     for k in ['temperature', 'top_p', 'max_length']:
-        parameters[k] = getattr(request, k)
+        v = getattr(request, k)
+        if v is not None:
+            parameters[k] = v
     messages = [message.__dict__ for message in request.messages]
 
     if request.stream:
