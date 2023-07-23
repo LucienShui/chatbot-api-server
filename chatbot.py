@@ -137,7 +137,7 @@ class ChatGPT(ChatBotBase):
         openai_response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
                                                        api_key=self.api_key, **parameters or {})
         content: str = openai_response['choices'][0]['message']['content']
-        self.logger.info(dumps({'messages': messages, 'parameters': parameters,
+        self.logger.info(dumps({'method': 'chat', 'messages': messages, 'parameters': parameters,
                                 'response': content, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
         return content
 
@@ -155,16 +155,33 @@ class ChatGPT(ChatBotBase):
             message += delta_content
             yield message
 
-            self.logger.info(dumps({'messages': messages, 'parameters': parameters,
-                                    'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
+        self.logger.info(dumps({'method': 'stream_chat', 'messages': messages, 'parameters': parameters,
+                                'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
 
 
 class SpecialChatGPT(ChatGPT):
-    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        response = ''
-        for response in self.stream_chat(messages, parameters):
-            pass
-        return response
+
+    def __init__(self, chat_only: bool = False, stream_only: bool = False, *args, **kwargs):
+        assert not (chat_only and stream_only), "chat_only and stream_only can't be true at the same time"
+        super().__init__(*args, **kwargs)
+        self.chat_only: bool = chat_only
+        self.stream_only: bool = stream_only
+
+    def stream_chat(self, *args, **kwargs) -> str:
+        if self.chat_only:
+            yield super().chat(*args, **kwargs)
+        else:
+            for response in super().stream_chat(*args, **kwargs):
+                yield response
+
+    def chat(self, *args, **kwargs) -> str:
+        if self.stream_only:
+            response = ''
+            for response in super().stream_chat(*args, **kwargs):
+                pass
+            return response
+        else:
+            return super().chat(*args, **kwargs)
 
 
 class AzureChatGPT(ChatGPT):
