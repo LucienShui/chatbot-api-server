@@ -70,16 +70,17 @@ class BaichuanChat(ChatBotBase):
         super(BaichuanChat, self).__init__()
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        from transformers.generation.utils import GenerationConfig
+        from transformers.generation import GenerationConfig
         self.tokenizer = AutoTokenizer.from_pretrained(
             pretrained, use_fast=False, trust_remote_code=True)
         self.model = AutoModelForCausalLM.from_pretrained(
             pretrained, torch_dtype=torch.float16, trust_remote_code=True)
         self.model = self.model.quantize(quantize).cuda() if quantize else self.model.cuda()
+        self.model = self.model.eval()
         self.model.generation_config = GenerationConfig.from_pretrained(pretrained)
 
     def to_generation_config(self, parameters: dict = None):
-        from transformers.generation.utils import GenerationConfig
+        from transformers.generation import GenerationConfig
         generation_config = GenerationConfig.from_dict({**self.model.generation_config.to_dict(), **(parameters or {})})
         return generation_config
 
@@ -121,6 +122,27 @@ class ChatGLM(ChatBotBase):
     def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         query, history = Converter.from_messages(messages)
         for response, _ in self.model.stream_chat(self.tokenizer, query, history=history, **parameters):
+            yield response
+
+
+class QwenChat(ChatBotBase):
+
+    def __init__(self, pretrained: str):
+        super(QwenChat, self).__init__()
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers.generation.utils import GenerationConfig
+        self.tokenizer = AutoTokenizer.from_pretrained(pretrained, trust_remote_code=True)
+        self.model = AutoModelForCausalLM.from_pretrained(pretrained, device_map='auto', trust_remote_code=True).eval()
+        self.model.generation_config = GenerationConfig.from_pretrained(pretrained, trust_remote_code=True)
+
+    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        query, history = Converter.from_messages(messages)
+        response, history = self.model.chat(self.tokenizer, query, history=history, **parameters)
+        return response
+
+    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        query, history = Converter.from_messages(messages)
+        for response in self.model.chat_stream(self.tokenizer, query, history=history, **parameters):
             yield response
 
 
@@ -204,7 +226,7 @@ class AzureChatGPT(ChatGPT):
         return super().stream_chat(messages, self.parameters_wrapper(parameters))
 
 
-supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, BaichuanChat, ChatGLM, SpecialChatGPT]}
+supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, BaichuanChat, ChatGLM, QwenChat, SpecialChatGPT]}
 
 
 def import_remote(module_path: str, config: dict):
