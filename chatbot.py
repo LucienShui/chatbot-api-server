@@ -1,5 +1,4 @@
 import os
-import time
 from functools import partial
 from json import dumps
 from typing import Dict, List, Tuple
@@ -133,16 +132,12 @@ class ChatGPT(ChatBotBase):
         self.api_key: str = api_key
 
     def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        start_time = time.time()
         openai_response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
                                                        api_key=self.api_key, **parameters or {})
         content: str = openai_response['choices'][0]['message']['content']
-        self.logger.info(dumps({'method': 'chat', 'messages': messages, 'parameters': parameters,
-                                'response': content, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
         return content
 
     def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        start_time = time.time()
         response = openai.ChatCompletion.create(model=self.model, messages=messages, api_base=self.api_base,
                                                 api_key=self.api_key, stream=True, **parameters or {})
         message = ''
@@ -154,9 +149,6 @@ class ChatGPT(ChatBotBase):
             delta_content = delta['content']
             message += delta_content
             yield message
-
-        self.logger.info(dumps({'method': 'stream_chat', 'messages': messages, 'parameters': parameters,
-                                'response': message, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
 
 
 class SpecialChatGPT(ChatGPT):
