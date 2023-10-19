@@ -1,13 +1,9 @@
 import os
-from functools import partial
-from json import dumps
 from typing import Dict, List, Tuple
 
 import openai
 
 from util import logger
-
-dumps = partial(dumps, separators=(',', ':'), ensure_ascii=False)
 
 
 class Converter:

@@ -8,7 +8,8 @@ LOG_DIR = 'logs'
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
 
-file_handler = TimedRotatingFileHandler(os.path.join(LOG_DIR, 'app.log'), when='MIDNIGHT', interval=1, backupCount=0)
+file_handler = TimedRotatingFileHandler(
+    os.path.join(LOG_DIR, 'app.log'), when='MIDNIGHT', interval=1, backupCount=0, encoding='utf-8')
 
 logging.basicConfig(
     level=logging.INFO,
