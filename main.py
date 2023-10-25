@@ -1,7 +1,5 @@
 import os
 import time
-from functools import partial
-from json import dumps
 from typing import Any, Dict, List, Annotated
 
 import uvicorn
@@ -16,8 +14,6 @@ from openai_object import (
     ChatCompletionResponseChoice, ChatMessage, ModelList, ModelCard
 )
 from util import load_config, logger
-
-dumps = partial(dumps, separators=(',', ':'), ensure_ascii=False)
 
 config = load_config(os.environ.get('CONFIG_FILE', 'config.json'))
 bot_map: Dict[str, ChatBotBase] = {}
@@ -64,8 +60,8 @@ async def chat(model: str, request: Request, token: Annotated[str | None, Header
     parameters: Dict[str, Any] = json_request.get('parameters', {})
     start_time = time.time()
     response = bot_map[model].chat(Converter.to_messages(query, history, system), parameters=parameters or {})
-    logger.info(dumps({'method': f'/api/chat/{model}', 'request': json_request,
-                       'response': response, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
+    logger.info({'method': f'/api/chat/{model}', 'request': json_request,
+                 'response': response, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
 
     return {
         "response": response,
@@ -91,7 +87,6 @@ async def steam_chat(websocket: WebSocket, model: str, token: Annotated[str | No
             history: list = json_request['history']
             parameters: dict = json_request.get('parameters', {})
             system: str = json_request.get('system', None)
-            logger.info(f'{websocket.client.host}:{websocket.client.port} query = {query}')
             start_time = time.time()
             response = ''
             for response in bot_map[model].stream_chat(
@@ -101,8 +96,8 @@ async def steam_chat(websocket: WebSocket, model: str, token: Annotated[str | No
                     "history": history + [[query, response]],
                     "status": 202
                 })
-            logger.info(dumps({'method': f'/api/chat/{model}/ws', 'request': json_request,
-                               'response': response, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
+            logger.info({'method': f'/api/chat/{model}/ws', 'request': json_request,
+                         'response': response, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
             await websocket.send_json({"status": 200})
     except WebSocketDisconnect:
         pass
@@ -130,8 +125,8 @@ async def create_chat_completion(request: ChatCompletionRequest, authorization: 
 
     start_time = time.time()
     response = bot_map[request.model].chat(messages, parameters)
-    logger.info(dumps({'method': f'/v1/chat/completions', 'request': request.dict(),
-                       'response': response, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
+    logger.info({'method': f'/v1/chat/completions', 'request': request.dict(),
+                 'response': response, 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
 
     choice_data = ChatCompletionResponseChoice(
         index=0,
@@ -169,9 +164,9 @@ async def stream_chat(messages: List[Dict[str, str]], parameters: dict, model_id
         )
         chunk = ChatCompletionResponse(model=model_id, choices=[choice_data], object="chat.completion.chunk")
         yield "{}".format(chunk.json(exclude_unset=True, ensure_ascii=False))
-    logger.info(dumps({'method': f'/v1/chat/completions', 'messages': messages, 'parameters': parameters,
-                       'model_id': model_id, 'response': new_response,
-                       'cost': f'{(time.time() - start_time) * 1000:.2f} ms'}))
+    logger.info({'method': f'/v1/chat/completions', 'messages': messages, 'parameters': parameters,
+                 'model_id': model_id, 'response': new_response,
+                 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
 
     choice_data = ChatCompletionResponseStreamChoice(
         index=0,
