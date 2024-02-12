@@ -36,6 +36,7 @@ class Qwen2(ChatAPIBase):
         self.im_end = '<|im_end|>'
 
     def chat(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionResponse]:
+        # 1. process input parameters
         messages = request.messages
         if messages[0].role != 'system':
             request.messages.insert(0, ChatMessage(role='system', content='You are a helpful assistant.'))
@@ -60,8 +61,10 @@ class Qwen2(ChatAPIBase):
             )
             yield ChatCompletionResponse(model=request.model, choices=[choice], object="chat.completion.chunk")
 
+            # https://huggingface.co/docs/transformers/v4.37.2/en/internal/generation_utils#transformers.TextIteratorStreamer
             streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True)
             generation_kwargs = {**model_inputs, "streamer": streamer, **parameters}
+            # 2. call generate
             Thread(target=self.model.generate, kwargs=generation_kwargs).start()
             response = ""
             drop_flag = False
@@ -78,6 +81,7 @@ class Qwen2(ChatAPIBase):
                     )
                     yield ChatCompletionResponse(model=request.model, choices=[choice], object="chat.completion.chunk")
 
+            # 3. hf's streamer return text directly, to count the token we need to encode it again.
             output_ids: List[int] = self.tokenizer.encode(response)
             completion_tokens = len(output_ids)
             total_tokens = prompt_tokens + completion_tokens
@@ -92,14 +96,16 @@ class Qwen2(ChatAPIBase):
                     prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens
                 ), object="chat.completion.chunk")
         else:
-            generated_ids = self.model.generate(model_inputs.input_ids, **parameters)
-            total_tokens: int = len(generated_ids[0])
-            generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in
-                             zip(model_inputs.input_ids, generated_ids)]
+            # 2. call generate
+            generated_ids_batch = self.model.generate(model_inputs.input_ids, **parameters)
+            total_tokens: int = len(generated_ids_batch[0])
+            # 3. convert batch output to text
+            output_ids_batch = [output_ids[len(input_ids):] for input_ids, output_ids in
+                                zip(model_inputs.input_ids, generated_ids_batch)]
 
-            completion_tokens: int = len(generated_ids[0])
+            completion_tokens: int = len(output_ids_batch[0])
             assert prompt_tokens + completion_tokens == total_tokens
-            response = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+            response = self.tokenizer.batch_decode(output_ids_batch, skip_special_tokens=True)[0]
             choice = ChatCompletionResponseChoice(
                 index=0,
                 message=ChatMessage(role="assistant", content=response),
