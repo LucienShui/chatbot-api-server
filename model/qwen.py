@@ -1,6 +1,7 @@
 from util.openai_object import (ChatCompletionRequest, ChatCompletionResponse, ChatCompletionResponseChoice,
                                 ChatMessage, ChatCompletionUsage, ChatCompletionResponseStreamChoice, DeltaMessage)
 from .base import ChatAPICompatible, Converter, ChatAPIBase
+from copy import deepcopy
 from typing import List, Dict, Iterator
 from transformers import TextIteratorStreamer
 from threading import Thread
@@ -31,8 +32,12 @@ class Qwen2(ChatAPIBase):
     def __init__(self, pretrained: str):
         super().__init__()
         from transformers import AutoModelForCausalLM, AutoTokenizer
+        import json
+        import os
         self.model = AutoModelForCausalLM.from_pretrained(pretrained, device_map="auto")
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained)
+        with open(os.path.join(pretrained, 'generation_config.json'), 'r') as f:
+            self.generation_config = json.load(f)
         self.im_end = '<|im_end|>'
 
     def chat(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionResponse]:
@@ -49,6 +54,8 @@ class Qwen2(ChatAPIBase):
             v = getattr(request, k)
             if v is not None:
                 parameters[k] = v
+
+        parameters = parameters or deepcopy(self.generation_config)
 
         parameters['max_new_tokens'] = request.max_tokens or 2048
         parameters['pad_token_id'] = self.tokenizer.eos_token_id
