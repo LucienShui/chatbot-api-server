@@ -4,7 +4,7 @@ import unittest
 class RemoteCodeTestCase(unittest.TestCase):
     def test_remote_code(self):
         import os
-        from chatbot import from_config
+        from model.base import from_config
         import tempfile
         with tempfile.TemporaryDirectory() as tmp_dir:
             print(tmp_dir)
@@ -28,7 +28,7 @@ class Bot(ChatBotBase):
 class TestChatBot(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        from chatbot import from_bot_map_config, Converter
+        from model.base import from_bot_map_config, Converter
         from util import load_config
         config = load_config('config.json')
         cls.to_massages = Converter.to_messages
@@ -49,7 +49,7 @@ class TestChatBot(unittest.TestCase):
 
 class ConverterTestCase(unittest.TestCase):
     def test_convertor(self):
-        from chatbot import Converter
+        from model.base import Converter
         query = 'Hi'
         history = [['Hello', 'World!']]
         expected_messages = [

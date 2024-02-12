@@ -8,12 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sse_starlette.sse import EventSourceResponse
 
-from chatbot import from_bot_map_config, ChatBotBase, Converter
-from openai_object import (
+from model.base import from_bot_map_config, ChatBotBase, Converter
+from util.openai_object import (
     ChatCompletionResponseStreamChoice, DeltaMessage, ChatCompletionResponse, ChatCompletionRequest,
     ChatCompletionResponseChoice, ChatMessage, ModelList, ModelCard
 )
-from util import load_config, logger
+from util.util import load_config, logger
 
 config = load_config(os.environ.get('CONFIG_FILE', 'config.json'))
 bot_map: Dict[str, ChatBotBase] = {}
@@ -56,7 +56,7 @@ async def chat(model: str, request: Request, token: Annotated[str | None, Header
     json_request: Dict[str, Any] = await request.json()
     query: str = json_request['query']
     history: List[List[str]] = json_request.get('history', [])
-    system: str = json_request.get('system', None)
+    system: str | None = json_request.get('system', None)
     parameters: Dict[str, Any] = json_request.get('parameters', {})
     start_time = time.time()
     response = bot_map[model].chat(Converter.to_messages(query, history, system), parameters=parameters or {})
@@ -86,7 +86,7 @@ async def steam_chat(websocket: WebSocket, model: str, token: Annotated[str | No
             query: str = json_request['query']
             history: list = json_request['history']
             parameters: dict = json_request.get('parameters', {})
-            system: str = json_request.get('system', None)
+            system: str | None = json_request.get('system', None)
             start_time = time.time()
             response = ''
             for response in bot_map[model].stream_chat(

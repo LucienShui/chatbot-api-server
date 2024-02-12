@@ -44,7 +44,7 @@ class CustomFileHandler(logging.Handler):
                 fcntl.flock(f, fcntl.LOCK_UN)
 
 
-LOG_DIR = 'logs'
+LOG_DIR = '../logs'
 
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
