@@ -68,7 +68,7 @@ class Qwen2(ChatAPIBase):
             for delta in streamer:
                 response += delta
                 if not drop_flag and delta:
-                    if self.im_end in delta:
+                    if self.im_end in delta:  # 如果 delta 中包含了<|im_end|>，则说明模型的本轮回答已经结束
                         drop_flag = True
                         delta = delta[:delta.index(self.im_end)]
                     choice = ChatCompletionResponseStreamChoice(
