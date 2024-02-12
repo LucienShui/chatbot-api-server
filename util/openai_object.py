@@ -34,8 +34,11 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
     temperature: Optional[float] = None
     top_p: Optional[float] = None
-    max_length: Optional[int] = None
+    max_tokens: Optional[int] = None
     stream: Optional[bool] = False
+    api_type: Optional[str] = None
+    api_version: Optional[str] = None
+    engine: Optional[str] = None
 
 
 class ChatCompletionResponseChoice(BaseModel):
@@ -51,9 +54,9 @@ class ChatCompletionResponseStreamChoice(BaseModel):
 
 
 class ChatCompletionUsage(BaseModel):
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
+    prompt_tokens: Optional[int]
+    completion_tokens: Optional[int]
+    total_tokens: Optional[int]
 
 
 class ChatCompletionResponse(BaseModel):

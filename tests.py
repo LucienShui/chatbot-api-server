@@ -28,7 +28,8 @@ class Bot(ChatBotBase):
 class TestChatBot(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        from model.base import from_bot_map_config, Converter
+        from model.base import Converter
+        from model.loader import from_bot_map_config
         from util import load_config
         config = load_config('config.json')
         cls.to_massages = Converter.to_messages
@@ -41,10 +42,20 @@ class TestChatBot(unittest.TestCase):
             print(response)
 
     def test_gpt3_chat(self):
-        print(self.bot_map['gpt-3'].chat(self.to_massages('你好')))
+        from util.openai_object import ChatCompletionRequest, ChatCompletionResponse
+        model = 'gpt-3.5-turbo-azure'
+        prompt = 'Hi'
+        response: ChatCompletionResponse = next(self.bot_map[model].chat(
+            ChatCompletionRequest(model=model, messages=self.to_massages(prompt))
+        ))
+        print(response.choices[0].message.content)
+
         print('=' * 16)
-        for response in self.bot_map['gpt-3'].stream_chat(self.to_massages('你好')):
-            print(response)
+        for response in self.bot_map[model].chat(
+                ChatCompletionRequest(model=model, messages=self.to_massages(prompt), stream=True)
+        ):
+            if content := response.choices[0].delta.content:
+                print(content, end='', flush=True)
 
 
 class ConverterTestCase(unittest.TestCase):
@@ -75,6 +86,15 @@ class ConverterTestCase(unittest.TestCase):
         converted_query, converted_history = Converter.from_messages(messages)
         self.assertEqual(expected_query, converted_query)
         self.assertEqual(expected_history, converted_history)
+
+
+class PydanticTestCase(unittest.TestCase):
+    def test_pydantic(self):
+        from util.openai_object import ChatCompletionUsage
+        usage = ChatCompletionUsage(prompt_tokens=100, completion_tokens=100)
+        print(usage.dict(exclude_unset=True))
+        print(usage.json(exclude_unset=True))
+        self.assertTrue(True)
 
 
 if __name__ == '__main__':

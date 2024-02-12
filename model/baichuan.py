@@ -1,8 +1,8 @@
-from .base import ChatBotBase, Converter
+from .base import ChatBotCompatible, Converter
 from typing import List, Dict
 
 
-class BaichuanChat(ChatBotBase):
+class BaichuanChat(ChatBotCompatible):
     def __init__(self, pretrained: str, quantize: int = None):
         super(BaichuanChat, self).__init__()
         import torch
@@ -31,12 +31,12 @@ class BaichuanChat(ChatBotBase):
                 result.append(message)
         return result
 
-    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+    def _chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         response = self.model.chat(
             self.tokenizer, self.process_messages(messages), generation_config=self.to_generation_config(parameters))
         return response
 
-    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+    def _stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         for response in self.model.chat(self.tokenizer, self.process_messages(messages), stream=True,
                                         generation_config=self.to_generation_config(parameters)):
             yield response

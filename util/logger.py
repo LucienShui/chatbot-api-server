@@ -1,4 +1,3 @@
-from json import load
 import logging
 import os
 import json
@@ -44,7 +43,7 @@ class CustomFileHandler(logging.Handler):
                 fcntl.flock(f, fcntl.LOCK_UN)
 
 
-LOG_DIR = '../logs'
+LOG_DIR = 'logs'
 
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
@@ -57,8 +56,3 @@ logging.basicConfig(
     ]
 )
 logger: logging.Logger = logging.getLogger('app')
-
-
-def load_config(config_file: str) -> dict:
-    with open(config_file) as f:
-        return load(f)

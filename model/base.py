@@ -1,11 +1,10 @@
-import os
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Iterator
 
-from util.util import logger
-from .baichuan import BaichuanChat
-from .chatglm import ChatGLM, ChatGLM3
-from .chatgpt import ChatGPT, AzureChatGPT
-from .qwen import QwenChat
+from util.logger import logger
+from util.openai_object import (
+    ChatCompletionResponseStreamChoice, DeltaMessage, ChatCompletionResponse, ChatCompletionRequest,
+    ChatCompletionResponseChoice, ChatMessage
+)
 
 
 class Converter:
@@ -55,80 +54,61 @@ class ChatBotBase:
     def __init__(self):
         self.logger = logger.getChild(self.__class__.__name__)
 
-    def chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
-        raise NotImplementedError
-
-    def stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+    def chat(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionResponse]:
         raise NotImplementedError
 
 
-supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, BaichuanChat, ChatGLM, ChatGLM3, QwenChat]}
+class ChatBotCompatible(ChatBotBase):
 
+    def _chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        raise NotImplementedError
 
-def import_remote(module_path: str, config: dict):
-    """
-    Args:
-        module_path:
-            a path like "/tmp/test_model/model.Bot"
-            which model means model.py, Bot is a class's name inside model.py
-        config:
-            module's __init__ parameters
-    Return:
-        an object of module
-    """
-    import sys
-    import tempfile
-    import shutil
-    package_name: str = 'remote_code'
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        base_dir, module = os.path.split(module_path)
-        shutil.copytree(base_dir, os.path.join(tmp_dir, package_name))
-        filename, class_name = os.path.splitext(module)
-        class_name = class_name.replace('.', '')
+    def _stream_chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
+        raise NotImplementedError
 
-        dont_write_bytecode = sys.dont_write_bytecode
-        sys.dont_write_bytecode = True  # do not generate __pycache__ inside directory
-        sys.path.insert(0, tmp_dir)
+    def chat(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionResponse]:
+        parameters: dict = {}
+        for k in ['temperature', 'top_p', 'max_tokens']:
+            v = getattr(request, k)
+            if v is not None:
+                parameters[k] = v
+        messages = [message.dict() for message in request.messages]
+        if request.stream:
+            choice_data = ChatCompletionResponseStreamChoice(
+                index=0,
+                delta=DeltaMessage(role="assistant"),
+                finish_reason=None
+            )
+            yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion.chunk")
 
-        exec(f'from {package_name}.{filename} import {class_name}')
-        obj = eval(class_name)(**config)
-        sys.path.pop(0)
-        sys.dont_write_bytecode = dont_write_bytecode
-        return obj
+            current_length = 0
 
+            for new_response in self._stream_chat(messages, parameters=parameters):
+                if len(new_response) == current_length:
+                    continue
 
-def from_config(bot_class: str, config: dict) -> ChatBotBase:
-    if bot_class in supported_class.keys():
-        return supported_class[bot_class](**config)
-    else:
-        try:
-            return import_remote(bot_class, config)
-        except Exception as e:
-            logger.exception(e)
-            raise ModuleNotFoundError(f"{bot_class} not in {list(supported_class.keys())}")
+                new_text = new_response[current_length:]
+                current_length = len(new_response)
 
+                choice_data = ChatCompletionResponseStreamChoice(
+                    index=0,
+                    delta=DeltaMessage(content=new_text),
+                    finish_reason=None
+                )
+                yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion.chunk")
 
-def check_alias(alias: Dict[str, str], config: Dict[str, Dict[str, str]]) -> bool:
-    link_count: Dict[str, int] = {}
-    for link, source in alias.items():
-        assert source in config, f"illegal alias: {source} not found in bot_map"
-        link_count[link] = link_count.get(link, 0) + 1
-    for link, count in link_count.items():
-        if count > 1:
-            raise AssertionError(f"duplicated alias: {link}")
-    return True
+            choice_data = ChatCompletionResponseStreamChoice(
+                index=0,
+                delta=DeltaMessage(),
+                finish_reason="stop"
+            )
+            yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion.chunk")
+        else:
+            response = self._chat(messages, parameters=parameters)
+            choice_data = ChatCompletionResponseChoice(
+                index=0,
+                message=ChatMessage(role="assistant", content=response),
+                finish_reason="stop"
+            )
 
-
-def from_bot_map_config(bot_map_config: Dict[str, dict], alias: Dict[str, str] = None,
-                        disable: List[str] = None) -> Dict[str, ChatBotBase]:
-    alias = alias or {}
-    disable = disable or []
-    map_config = {k: v for k, v in bot_map_config.items() if k not in disable}
-    check_alias(alias, map_config)
-    bot_map: Dict[str, ChatBotBase] = {}
-    for bot, config in map_config.items():
-        bot_class = config.pop('class')
-        bot_map[bot] = from_config(bot_class, config)
-    for link, source in alias.items():
-        bot_map[link] = bot_map[source]
-    return bot_map
+            yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion")
