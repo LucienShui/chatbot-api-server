@@ -68,10 +68,12 @@ class ChatAPICompatible(ChatAPIBase):
 
     def chat(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionResponse]:
         parameters: dict = {}
-        for k in ['temperature', 'top_p', 'max_tokens']:
+        for k in ['temperature', 'top_p']:
             v = getattr(request, k)
             if v is not None:
                 parameters[k] = v
+        if request.max_tokens is not None:
+            parameters['max_length'] = request.max_tokens
         messages = [message.dict() for message in request.messages]
         if request.stream:
             choice_data = ChatCompletionResponseStreamChoice(
