@@ -62,9 +62,9 @@ def stream_wrapper(request: ChatCompletionRequest) -> Iterable:
         if delta := chunk.choices[0].delta.content:
             response += delta
         yield "{}".format(chunk.json(exclude_unset=True, ensure_ascii=False))
-
-    logger.info({'method': f'/v1/chat/completions', 'request': request.dict(exclude_unset=True), 'response': response,
-                 'usage': chunk.usage.dict(exclude_unset=True) if chunk else {},
+    usage = chunk.usage
+    logger.info({'method': f'/v1/chat/completions', 'request': request.dict(exclude_unset=True),
+                 'response': response, 'usage': usage.dict(exclude_unset=True) if usage else {},
                  'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
 
 
