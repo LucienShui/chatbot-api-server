@@ -61,7 +61,7 @@ def stream_wrapper(request: ChatCompletionRequest) -> Iterable:
     for chunk in bot_map[request.model].chat(request):
         if delta := chunk.choices[0].delta.content:
             response += delta
-        yield "{}".format(chunk.json(exclude_unset=True))
+        yield "{}".format(chunk.json(exclude_unset=True, ensure_ascii=False))
 
     logger.info({'method': f'/v1/chat/completions', 'request': request.dict(exclude_unset=True), 'response': response,
                  'usage': chunk.usage.dict(exclude_unset=True) if chunk else {},

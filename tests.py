@@ -109,8 +109,8 @@ class PydanticTestCase(unittest.TestCase):
     def test_pydantic(self):
         from util.openai_object import ChatCompletionUsage
         usage = ChatCompletionUsage(prompt_tokens=100, completion_tokens=100)
-        print(usage.dict(exclude_unset=True))
-        print(usage.json(exclude_unset=True))
+        print(usage.dict(exclude_unset=True, ensure_ascii=False))
+        print(usage.json(exclude_unset=True, ensure_ascii=False))
         self.assertTrue(True)
 
 
