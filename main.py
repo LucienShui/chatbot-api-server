@@ -83,7 +83,7 @@ async def create_chat_completion(request: ChatCompletionRequest, authorization: 
         response = completion_response.choices[0].message.content
         usage = completion_response.usage
         logger.info({'method': f'/v1/chat/completions', 'request': request.dict(exclude_unset=True),
-                     'response': response, 'usage': usage.dict(exclude_unset=True),
+                     'response': response, 'usage': usage.dict(exclude_unset=True) if usage else {},
                      'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
 
     return completion_response
