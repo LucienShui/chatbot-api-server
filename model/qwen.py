@@ -1,7 +1,9 @@
 from util.openai_object import (ChatCompletionRequest, ChatCompletionResponse, ChatCompletionResponseChoice,
-                                ChatMessage, ChatCompletionUsage)
+                                ChatMessage, ChatCompletionUsage, ChatCompletionResponseStreamChoice, DeltaMessage)
 from .base import ChatAPICompatible, Converter, ChatAPIBase
 from typing import List, Dict, Iterator
+from transformers import TextIteratorStreamer
+from threading import Thread
 
 
 class Qwen(ChatAPICompatible):
@@ -31,6 +33,7 @@ class Qwen2(ChatAPIBase):
         from transformers import AutoModelForCausalLM, AutoTokenizer
         self.model = AutoModelForCausalLM.from_pretrained(pretrained, device_map="auto")
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained)
+        self.im_end = '<|im_end|>'
 
     def chat(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionResponse]:
         messages = request.messages
@@ -40,10 +43,56 @@ class Qwen2(ChatAPIBase):
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
         prompt_tokens: int = len(model_inputs[0])
 
-        if request.stream and False:
-            pass
+        parameters: dict = {}
+        for k in ['temperature', 'top_p']:
+            v = getattr(request, k)
+            if v is not None:
+                parameters[k] = v
+
+        parameters['max_new_tokens'] = request.max_tokens or 2048
+        parameters['pad_token_id'] = self.tokenizer.eos_token_id
+
+        if request.stream:
+            choice = ChatCompletionResponseStreamChoice(
+                index=0,
+                delta=DeltaMessage(role="assistant"),
+                finish_reason=None
+            )
+            yield ChatCompletionResponse(model=request.model, choices=[choice], object="chat.completion.chunk")
+
+            streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True)
+            generation_kwargs = {**model_inputs, "streamer": streamer, **parameters}
+            Thread(target=self.model.generate, kwargs=generation_kwargs).start()
+            response = ""
+            drop_flag = False
+            for delta in streamer:
+                response += delta
+                if not drop_flag and delta:
+                    if self.im_end in delta:
+                        drop_flag = True
+                        delta = delta[:delta.index(self.im_end)]
+                    choice = ChatCompletionResponseStreamChoice(
+                        index=0,
+                        delta=DeltaMessage(content=delta),
+                        finish_reason=None
+                    )
+                    yield ChatCompletionResponse(model=request.model, choices=[choice], object="chat.completion.chunk")
+
+            output_ids: List[int] = self.tokenizer.encode(response)
+            completion_tokens = len(output_ids)
+            total_tokens = prompt_tokens + completion_tokens
+            choice = ChatCompletionResponseStreamChoice(
+                index=0,
+                delta=DeltaMessage(),
+                finish_reason="stop"
+            )
+            yield ChatCompletionResponse(
+                model=request.model, choices=[choice],
+                usage=ChatCompletionUsage(
+                    prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens
+                ), object="chat.completion.chunk")
         else:
-            generated_ids = self.model.generate(model_inputs.input_ids, max_new_tokens=request.max_tokens)
+            generated_ids = self.model.generate(model_inputs.input_ids, **parameters)
             total_tokens: int = len(generated_ids[0])
             generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in
                              zip(model_inputs.input_ids, generated_ids)]

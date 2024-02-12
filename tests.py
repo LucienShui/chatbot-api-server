@@ -57,6 +57,23 @@ class TestChatBot(unittest.TestCase):
             if content := response.choices[0].delta.content:
                 print(content, end='', flush=True)
 
+    def test_qwen2_chat(self):
+        from util.openai_object import ChatCompletionRequest, ChatCompletionResponse
+        model = 'qwen1.5-0.5b-chat'
+        prompt = 'Hi'
+        response: ChatCompletionResponse = next(self.bot_map[model].chat(
+            ChatCompletionRequest(model=model, messages=self.to_massages(prompt))
+        ))
+        print(response.choices[0].message.content)
+
+        print('=' * 16)
+        for response in self.bot_map[model].chat(
+                ChatCompletionRequest(model=model, messages=self.to_massages(prompt), stream=True)
+        ):
+            if content := response.choices[0].delta.content:
+                print(content, end='', flush=True)
+        self.assertTrue(True)
+
 
 class ConverterTestCase(unittest.TestCase):
     def test_convertor(self):
