@@ -2,13 +2,13 @@ import os
 from typing import Dict, List
 
 from util.logger import logger
-from .baichuan import BaichuanChat
-from .base import ChatBotBase
+from .baichuan import Baichuan
+from .base import ChatAPIBase
 from .chatglm import ChatGLM, ChatGLM3
 from .chatgpt import ChatGPT, AzureChatGPT
-from .qwen import QwenChat
+from .qwen import Qwen, Qwen2
 
-supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, BaichuanChat, ChatGLM, ChatGLM3, QwenChat]}
+supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, Baichuan, ChatGLM, ChatGLM3, Qwen, Qwen2]}
 
 
 def import_remote(module_path: str, config: dict):
@@ -43,7 +43,7 @@ def import_remote(module_path: str, config: dict):
         return obj
 
 
-def from_config(bot_class: str, config: dict) -> ChatBotBase:
+def from_config(bot_class: str, config: dict) -> ChatAPIBase:
     if bot_class in supported_class.keys():
         return supported_class[bot_class](**config)
     else:
@@ -66,12 +66,12 @@ def check_alias(alias: Dict[str, str], config: Dict[str, Dict[str, str]]) -> boo
 
 
 def from_bot_map_config(bot_map_config: Dict[str, dict], alias: Dict[str, str] = None,
-                        disable: List[str] = None) -> Dict[str, ChatBotBase]:
+                        disable: List[str] = None) -> Dict[str, ChatAPIBase]:
     alias = alias or {}
     disable = disable or []
     map_config = {k: v for k, v in bot_map_config.items() if k not in disable}
     check_alias(alias, map_config)
-    bot_map: Dict[str, ChatBotBase] = {}
+    bot_map: Dict[str, ChatAPIBase] = {}
     for bot, config in map_config.items():
         bot_class = config.pop('class')
         bot_map[bot] = from_config(bot_class, config)

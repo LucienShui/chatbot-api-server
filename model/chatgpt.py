@@ -2,12 +2,12 @@ from util.openai_object import (
     ChatCompletionRequest, ChatCompletionResponse, ChatCompletionResponseStreamChoice,
     DeltaMessage, ChatCompletionResponseChoice, ChatMessage, ChatCompletionUsage
 )
-from .base import ChatBotCompatible, ChatBotBase
+from .base import ChatAPICompatible, ChatAPIBase
 from typing import List, Dict, Iterator
 import openai
 
 
-class ChatGPTBak(ChatBotCompatible):
+class ChatGPTBak(ChatAPICompatible):
 
     def __init__(self, model: str, api_key: str, api_base: str = 'https://api.openai-proxy.com/v1'):
         super().__init__()
@@ -38,7 +38,7 @@ class ChatGPTBak(ChatBotCompatible):
             yield message
 
 
-class ChatGPT(ChatBotBase):
+class ChatGPT(ChatAPIBase):
 
     def __init__(self, model: str, api_key: str, api_base: str = 'https://api.openai-proxy.com/v1'):
         super().__init__()

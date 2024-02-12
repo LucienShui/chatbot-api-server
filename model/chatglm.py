@@ -1,8 +1,8 @@
-from .base import ChatBotCompatible, Converter
+from .base import ChatAPICompatible, Converter
 from typing import List, Dict, Tuple
 
 
-class ChatGLM(ChatBotCompatible):
+class ChatGLM(ChatAPICompatible):
 
     def __init__(self, pretrained: str):
         from transformers import AutoTokenizer, AutoModel, PreTrainedTokenizer, PreTrainedModel

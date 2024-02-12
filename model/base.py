@@ -50,7 +50,7 @@ class Converter:
         return query, history
 
 
-class ChatBotBase:
+class ChatAPIBase:
     def __init__(self):
         self.logger = logger.getChild(self.__class__.__name__)
 
@@ -58,7 +58,7 @@ class ChatBotBase:
         raise NotImplementedError
 
 
-class ChatBotCompatible(ChatBotBase):
+class ChatAPICompatible(ChatAPIBase):
 
     def _chat(self, messages: List[Dict[str, str]], parameters: dict = None) -> str:
         raise NotImplementedError

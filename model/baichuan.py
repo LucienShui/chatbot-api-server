@@ -1,10 +1,10 @@
-from .base import ChatBotCompatible, Converter
+from .base import ChatAPICompatible, Converter
 from typing import List, Dict
 
 
-class BaichuanChat(ChatBotCompatible):
+class Baichuan(ChatAPICompatible):
     def __init__(self, pretrained: str, quantize: int = None):
-        super(BaichuanChat, self).__init__()
+        super(Baichuan, self).__init__()
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
         from transformers.generation import GenerationConfig

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sse_starlette.sse import EventSourceResponse
 
-from model.base import ChatBotBase
+from model.base import ChatAPIBase
 from model.loader import from_bot_map_config
 from util.openai_object import (ChatCompletionResponse, ChatCompletionRequest, ChatCompletionResponseChoice,
                                 ChatMessage, ModelList, ModelCard)
@@ -16,7 +16,7 @@ from util.logger import logger
 from util import load_config
 
 config = load_config(os.environ.get('CONFIG_FILE', 'config.json'))
-bot_map: Dict[str, ChatBotBase] = {}
+bot_map: Dict[str, ChatAPIBase] = {}
 model_list: ModelList = ModelList(data=[])
 token_list: list = config['token_list']
 
