@@ -2,8 +2,8 @@ from typing import Dict, List, Tuple, Iterator
 
 from util.logger import logger
 from util.openai_object import (
-    ChatCompletionResponseStreamChoice, DeltaMessage, ChatCompletionResponse, ChatCompletionRequest,
-    ChatCompletionResponseChoice, ChatMessage
+    ChatCompletionResponse, ChatCompletionRequest,
+    ChatCompletionUsage
 )
 
 
@@ -76,13 +76,7 @@ class ChatAPICompatible(ChatAPIBase):
             parameters['max_length'] = request.max_tokens
         messages = [message.dict() for message in request.messages]
         if request.stream:
-            choice_data = ChatCompletionResponseStreamChoice(
-                index=0,
-                delta=DeltaMessage(role="assistant"),
-                finish_reason=None
-            )
-            yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion.chunk")
-
+            yield request.response()
             current_length = 0
 
             for new_response in self._stream_chat(messages, parameters=parameters):
@@ -91,26 +85,8 @@ class ChatAPICompatible(ChatAPIBase):
 
                 new_text = new_response[current_length:]
                 current_length = len(new_response)
-
-                choice_data = ChatCompletionResponseStreamChoice(
-                    index=0,
-                    delta=DeltaMessage(content=new_text),
-                    finish_reason=None
-                )
-                yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion.chunk")
-
-            choice_data = ChatCompletionResponseStreamChoice(
-                index=0,
-                delta=DeltaMessage(),
-                finish_reason="stop"
-            )
-            yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion.chunk")
+                yield request.response(content=new_text)
+            yield request.response(usage=ChatCompletionUsage())
         else:
             response = self._chat(messages, parameters=parameters)
-            choice_data = ChatCompletionResponseChoice(
-                index=0,
-                message=ChatMessage(role="assistant", content=response),
-                finish_reason="stop"
-            )
-
-            yield ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion")
+            yield request.response(content=response, usage=ChatCompletionUsage())

@@ -1,0 +1,22 @@
+### Send chat completion request
+POST http://localhost:8000/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer !!!CHANGE_THIS!!!
+
+{
+  "model": "gpt-3.5-turbo",
+  "messages": [{"role": "user", "content": "Hi"}],
+  "max_tokens": 2048
+}
+
+### Send stream chat completion request
+POST http://localhost:8000/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer !!!CHANGE_THIS!!!
+
+{
+  "model": "gpt-3.5-turbo",
+  "messages": [{"role": "user", "content": "Hi"}],
+  "max_tokens": 2048,
+  "stream": true
+}

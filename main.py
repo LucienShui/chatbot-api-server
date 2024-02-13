@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Any, Dict, List, Annotated, Iterable
+from typing import Dict, Annotated, Iterable
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, status, Header
@@ -10,10 +10,9 @@ from sse_starlette.sse import EventSourceResponse
 
 from model.base import ChatAPIBase
 from model.loader import from_bot_map_config
-from util.openai_object import (ChatCompletionResponse, ChatCompletionRequest, ChatCompletionResponseChoice,
-                                ChatMessage, ModelList, ModelCard)
-from util.logger import logger
 from util import load_config
+from util.logger import logger
+from util.openai_object import ChatCompletionResponse, ChatCompletionRequest, ModelList, ModelCard, ChatCompletionUsage
 
 config = load_config(os.environ.get('CONFIG_FILE', 'config.json'))
 bot_map: Dict[str, ChatAPIBase] = {}
@@ -54,39 +53,40 @@ async def list_models():
     return model_list
 
 
-def stream_wrapper(request: ChatCompletionRequest) -> Iterable:
+def log(method: str, request: ChatCompletionRequest, response: str,
+        usage: ChatCompletionUsage, start_time: float) -> None:
+    logger.info({
+        'method': method,
+        'request': request.dict(exclude_unset=True),
+        'response': response,
+        'usage': usage.dict(exclude_unset=True) if usage else {},
+        'cost': f'{(time.time() - start_time) * 1000:.2f} ms'
+    })
+
+
+def stream_chat(request: ChatCompletionRequest) -> Iterable:
     start_time = time.time()
     response = ''
-    chunk = None
+    chunk = ChatCompletionResponse(model=request.model, object="chat.completion.chunk", choices=[])
     for chunk in bot_map[request.model].chat(request):
         if delta := chunk.choices[0].delta.content:
             response += delta
-        yield "{}".format(chunk.json(exclude_unset=True, ensure_ascii=False))
-    usage = chunk.usage
-    logger.info({'method': f'/v1/chat/completions', 'request': request.dict(exclude_unset=True),
-                 'response': response, 'usage': usage.dict(exclude_unset=True) if usage else {},
-                 'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
+        yield "{}".format(chunk.json(exclude_unset=True, ensure_ascii=False, separators=(',', ':')))
+    log(method='/v1/chat/completions', request=request, response=response, usage=chunk.usage, start_time=start_time)
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 async def create_chat_completion(request: ChatCompletionRequest, authorization: Annotated[str | None, Header()]):
     if not (authorization.startswith('Bearer ') and authorization.replace('Bearer ', '') in token_list):
         raise HTTPException(status_code=401, detail="Invalid API key")
-
     if request.stream:
-        generate = stream_wrapper(request)
-        return EventSourceResponse(generate, media_type="text/event-stream")
+        return EventSourceResponse(stream_chat(request), media_type="text/event-stream")
     else:
         start_time = time.time()
-        bot = bot_map[request.model]
-        completion_response = next(bot.chat(request))
-        response = completion_response.choices[0].message.content
-        usage = completion_response.usage
-        logger.info({'method': f'/v1/chat/completions', 'request': request.dict(exclude_unset=True),
-                     'response': response, 'usage': usage.dict(exclude_unset=True) if usage else {},
-                     'cost': f'{(time.time() - start_time) * 1000:.2f} ms'})
-
-    return completion_response
+        completion_response = next(bot_map[request.model].chat(request))
+        log(method='/v1/chat/completions', request=request, response=completion_response.choices[0].message.content,
+            usage=completion_response.usage, start_time=start_time)
+        return completion_response
 
 
 def main():

@@ -1,10 +1,11 @@
-from util.openai_object import (ChatCompletionRequest, ChatCompletionResponse, ChatCompletionResponseChoice,
-                                ChatMessage, ChatCompletionUsage, ChatCompletionResponseStreamChoice, DeltaMessage)
-from .base import ChatAPICompatible, Converter, ChatAPIBase
 from copy import deepcopy
-from typing import List, Dict, Iterator
-from transformers import TextIteratorStreamer
 from threading import Thread
+from typing import List, Dict, Iterator
+
+from transformers import TextIteratorStreamer
+
+from util.openai_object import (ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatCompletionUsage)
+from .base import ChatAPICompatible, Converter, ChatAPIBase
 
 
 class Qwen(ChatAPICompatible):
@@ -44,7 +45,7 @@ class Qwen2(ChatAPIBase):
         # 1. process input parameters
         messages = request.messages
         if messages[0].role != 'system':
-            request.messages.insert(0, ChatMessage(role='system', content='You are a helpful assistant.'))
+            messages = [ChatMessage(role='system', content='You are a helpful assistant.')] + messages
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
         prompt_tokens: int = len(model_inputs[0])
@@ -61,12 +62,7 @@ class Qwen2(ChatAPIBase):
         parameters['pad_token_id'] = self.tokenizer.eos_token_id
 
         if request.stream:
-            choice = ChatCompletionResponseStreamChoice(
-                index=0,
-                delta=DeltaMessage(role="assistant"),
-                finish_reason=None
-            )
-            yield ChatCompletionResponse(model=request.model, choices=[choice], object="chat.completion.chunk")
+            yield request.response()
 
             # https://huggingface.co/docs/transformers/v4.37.2/en/internal/generation_utils#transformers.TextIteratorStreamer
             streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True)
@@ -81,27 +77,15 @@ class Qwen2(ChatAPIBase):
                     if self.im_end in delta:  # 如果 delta 中包含了<|im_end|>，则说明模型的本轮回答已经结束
                         drop_flag = True
                         delta = delta[:delta.index(self.im_end)]
-                    choice = ChatCompletionResponseStreamChoice(
-                        index=0,
-                        delta=DeltaMessage(content=delta),
-                        finish_reason=None
-                    )
-                    yield ChatCompletionResponse(model=request.model, choices=[choice], object="chat.completion.chunk")
+                    yield request.response(content=delta)
 
             # 3. hf's streamer return text directly, to count the token we need to encode it again.
             output_ids: List[int] = self.tokenizer.encode(response)
             completion_tokens = len(output_ids)
             total_tokens = prompt_tokens + completion_tokens
-            choice = ChatCompletionResponseStreamChoice(
-                index=0,
-                delta=DeltaMessage(),
-                finish_reason="stop"
-            )
-            yield ChatCompletionResponse(
-                model=request.model, choices=[choice],
-                usage=ChatCompletionUsage(
-                    prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens
-                ), object="chat.completion.chunk")
+            usage = ChatCompletionUsage(
+                prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens)
+            yield request.response(usage=usage)
         else:
             # 2. call generate
             generated_ids_batch = self.model.generate(model_inputs.input_ids, **parameters)
@@ -113,11 +97,6 @@ class Qwen2(ChatAPIBase):
             completion_tokens: int = len(output_ids_batch[0])
             assert prompt_tokens + completion_tokens == total_tokens
             response = self.tokenizer.batch_decode(output_ids_batch, skip_special_tokens=True)[0]
-            choice = ChatCompletionResponseChoice(
-                index=0,
-                message=ChatMessage(role="assistant", content=response),
-                finish_reason="stop"
-            )
             usage = ChatCompletionUsage(
                 prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens)
-            yield ChatCompletionResponse(model=request.model, choices=[choice], object="chat.completion", usage=usage)
+            yield request.response(content=response, usage=usage)

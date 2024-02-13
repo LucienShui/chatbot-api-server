@@ -59,7 +59,7 @@ class TestChatBot(unittest.TestCase):
 
     def test_qwen2_chat(self):
         from util.openai_object import ChatCompletionRequest, ChatCompletionResponse
-        model = 'qwen1.5-0.5b-chat'
+        model = 'mock-gpt'
         prompt = 'Hi'
         response: ChatCompletionResponse = next(self.bot_map[model].chat(
             ChatCompletionRequest(model=model, messages=self.to_massages(prompt))

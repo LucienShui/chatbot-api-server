@@ -6,25 +6,20 @@
       "model": "gpt-4",
       "endpoint": "https://api.openai-proxy.com"
     },
-    "gpt-3": {
-      "class": "ChatGPT",
-      "api_key": "",
-      "model": "gpt-3.5-turbo",
-      "endpoint": "https://api.openai-proxy.com"
-    },
-    "chatglm-6b": {
-      "class": "ChatGLM",
-      "pretrained": ""
+    "mock-gpt": {
+      "class": "Mock",
+      "response": "Hi，这是一句用于测试的回答。\nHi, this is a mock response for testing.",
+      "sleep": 0.02
     }
   },
   "alias": {
-    "gpt-3.5-turbo": "chatglm-6b"
+    "gpt-3.5-turbo": "mock-gpt"
   },
-  "disable": ["gpt-3", "gpt-4"],
+  "disable": ["gpt-4"],
   "server": {
     "host": "0.0.0.0",
     "port": 8000,
-    "workers": 4
+    "workers": 1
   },
-  "token_list": []
+  "token_list": ["!!!CHANGE_THIS!!!"]
 }

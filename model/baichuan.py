@@ -1,5 +1,6 @@
-from .base import ChatAPICompatible, Converter
 from typing import List, Dict
+
+from .base import ChatAPICompatible, Converter
 
 
 class Baichuan(ChatAPICompatible):

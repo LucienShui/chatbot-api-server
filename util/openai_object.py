@@ -4,6 +4,13 @@ from typing import List, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 
+class Role:
+    user = "user"
+    assistant = "assistant"
+    system = "system"
+    literal = Literal["user", "assistant", "system"]
+
+
 class ModelCard(BaseModel):
     id: str
     object: str = "model"
@@ -20,25 +27,13 @@ class ModelList(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: Literal["user", "assistant", "system"]
+    role: Role.literal
     content: str
 
 
 class DeltaMessage(BaseModel):
-    role: Optional[Literal["user", "assistant", "system"]] = None
+    role: Optional[Role.literal] = None
     content: Optional[str] = None
-
-
-class ChatCompletionRequest(BaseModel):
-    model: str
-    messages: List[ChatMessage]
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    max_tokens: Optional[int] = None
-    stream: Optional[bool] = False
-    api_type: Optional[str] = None
-    api_version: Optional[str] = None
-    engine: Optional[str] = None
 
 
 class ChatCompletionResponseChoice(BaseModel):
@@ -65,3 +60,30 @@ class ChatCompletionResponse(BaseModel):
     choices: List[Union[ChatCompletionResponseChoice, ChatCompletionResponseStreamChoice]]
     created: Optional[int] = Field(default_factory=lambda: int(time.time()))
     usage: Optional[ChatCompletionUsage] = None
+
+
+class ChatCompletionRequest(BaseModel):
+    model: str
+    messages: List[ChatMessage]
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+    stream: Optional[bool] = False
+    api_type: Optional[str] = None
+    api_version: Optional[str] = None
+    engine: Optional[str] = None
+
+    def response(self, content: str = None, usage: ChatCompletionUsage = None) -> ChatCompletionResponse:
+        stream_choice, response = ChatCompletionResponseStreamChoice, ChatCompletionResponse  # alias for short
+        if self.stream:
+            if content is not None:  # streaming
+                choice = stream_choice(index=0, delta=DeltaMessage(content=content), finish_reason=None)
+            elif usage is None:  # before streaming
+                choice = stream_choice(index=0, delta=DeltaMessage(role=Role.assistant), finish_reason=None)
+            else:  # after streaming
+                choice = stream_choice(index=0, delta=DeltaMessage(), finish_reason="stop")
+            return response(model=self.model, choices=[choice], usage=usage, object="chat.completion.chunk")
+        else:
+            message = ChatMessage(role=Role.assistant, content=content)
+            choice = ChatCompletionResponseChoice(index=0, message=message, finish_reason="stop")
+            return response(model=self.model, choices=[choice], usage=usage, object="chat.completion")
