@@ -4,7 +4,7 @@ from typing import List, Dict, Iterator
 
 from transformers import TextIteratorStreamer
 
-from util.openai_object import (ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatCompletionUsage)
+from util.openai_object import ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatCompletionUsage, Role
 from .base import ChatAPICompatible, Converter, ChatAPIBase
 
 
@@ -44,8 +44,8 @@ class Qwen2(ChatAPIBase):
     def chat(self, request: ChatCompletionRequest) -> Iterator[ChatCompletionResponse]:
         # 1. process input parameters
         messages = request.messages
-        if messages[0].role != 'system':
-            messages = [ChatMessage(role='system', content='You are a helpful assistant.')] + messages
+        if messages[0].role != Role.system:
+            messages = [ChatMessage(role=Role.system, content='You are a helpful assistant.')] + messages
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
         prompt_tokens: int = len(model_inputs[0])

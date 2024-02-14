@@ -7,9 +7,11 @@ from .base import ChatAPIBase
 from .chatglm import ChatGLM, ChatGLM3
 from .chatgpt import ChatGPT, AzureChatGPT
 from .qwen import Qwen, Qwen2
+from .qwen_vllm import Qwen2VLLM
 from .mock import Mock
 
-supported_class = {c.__name__: c for c in [ChatGPT, AzureChatGPT, Baichuan, ChatGLM, ChatGLM3, Qwen, Qwen2, Mock]}
+supported_class = {c.__name__: c for c in [
+    ChatGPT, AzureChatGPT, Baichuan, ChatGLM, ChatGLM3, Qwen, Qwen2, Qwen2VLLM, Mock]}
 
 
 def import_remote(module_path: str, config: dict):

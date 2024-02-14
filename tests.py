@@ -41,6 +41,22 @@ class TestChatBot(unittest.TestCase):
         for response in self.bot_map['gpt-4'].stream_chat(self.to_massages('你好')):
             print(response)
 
+    def test_qwen_chat(self):
+        from util.openai_object import ChatCompletionRequest, ChatMessage, Role
+        model = 'qwen1.5-7b-chat-vllm'
+        request = ChatCompletionRequest(model=model, messages=[
+            ChatMessage(role=Role.system, content='You are a helpful assistant.'),
+            ChatMessage(role=Role.user, content='Hi')
+        ], temperature=0.05, top_p=0.8)
+        # response: ChatCompletionResponse = next(self.bot_map[model].chat(request))
+        # print(response.choices[0].message.content)
+
+        print('=' * 16)
+        request.stream = True
+        for response in self.bot_map[model].chat(request):
+            if content := response.choices[0].delta.content:
+                print(content, end='', flush=True)
+
     def test_gpt3_chat(self):
         from util.openai_object import ChatCompletionRequest, ChatCompletionResponse
         model = 'gpt-3.5-turbo-azure'
@@ -109,8 +125,8 @@ class PydanticTestCase(unittest.TestCase):
     def test_pydantic(self):
         from util.openai_object import ChatCompletionUsage
         usage = ChatCompletionUsage(prompt_tokens=100, completion_tokens=100)
-        print(usage.dict(exclude_unset=True, ensure_ascii=False))
-        print(usage.json(exclude_unset=True, ensure_ascii=False))
+        print(usage.dict(exclude_unset=True))
+        print(usage.json(exclude_unset=True))
         self.assertTrue(True)
 
 
